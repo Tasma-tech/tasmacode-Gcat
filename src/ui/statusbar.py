@@ -1,5 +1,5 @@
 from PySide6.QtWidgets import QStatusBar, QLabel, QPushButton, QWidget, QHBoxLayout, QStyle, QMenu
-from PySide6.QtCore import Qt, QTimer
+from PySide6.QtCore import Qt, QTimer, QSize
 
 class StatusBar(QStatusBar):
     """Barra de status customizada."""
@@ -69,6 +69,9 @@ class StatusBar(QStatusBar):
 
     def update_cursor_info(self, line, col):
         self.lbl_cursor.setText(f"Ln {line+1}, Col {col+1}")
+
+    def update_filename(self, filename: str):
+        self.showMessage(filename)
 
     def update_lang(self, lang):
         self.btn_lang.setText(lang)

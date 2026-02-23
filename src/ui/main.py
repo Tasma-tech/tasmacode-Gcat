@@ -691,6 +691,15 @@ class JCodeMainWindow(QMainWindow):
         # Atualiza estado da ação 'Salvar'
         if hasattr(self, 'save_action'):
             self.save_action.setEnabled(buffer.dirty)
+        
+        # Atualiza nome do arquivo na barra de status
+        if file_path:
+            filename = os.path.basename(file_path)
+            self.custom_statusbar.update_filename(filename)
+        else:
+            # Mostra "Novo Arquivo" ou similar se não tiver arquivo
+            self.custom_statusbar.update_filename("Novo Arquivo")
+
         self.find_action.setEnabled(True)
         
     def _load_extensions(self):
