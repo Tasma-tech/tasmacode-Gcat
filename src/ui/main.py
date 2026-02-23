@@ -140,11 +140,9 @@ class JCodeMainWindow(QMainWindow):
         edit_menu.addAction(self.undo_action)
         edit_menu.addAction(self.redo_action)
         edit_menu.addSeparator()
-        # Placeholders para funcionalidades futuras
-        for name in ["Recortar", "Copiar", "Colar", "Localizar"]:
-            action = QAction(name, self)
-            action.setEnabled(False)
-            edit_menu.addAction(action)
+        edit_menu.addAction(self.cut_action)
+        edit_menu.addAction(self.copy_action)
+        edit_menu.addAction(self.paste_action)
 
         # --- Menu Exibir ---
         view_menu = menu_bar.addMenu("&Exibir")
@@ -197,6 +195,18 @@ class JCodeMainWindow(QMainWindow):
         self.redo_action.setShortcut(Shortcuts.REDO)
         self.redo_action.triggered.connect(lambda: self.command_registry.execute("edit.redo"))
 
+        self.cut_action = QAction("Recortar", self)
+        self.cut_action.setShortcut(Shortcuts.CUT)
+        self.cut_action.triggered.connect(lambda: self.command_registry.execute("edit.cut"))
+
+        self.copy_action = QAction("Copiar", self)
+        self.copy_action.setShortcut(Shortcuts.COPY)
+        self.copy_action.triggered.connect(lambda: self.command_registry.execute("edit.copy"))
+
+        self.paste_action = QAction("Colar", self)
+        self.paste_action.setShortcut(Shortcuts.PASTE)
+        self.paste_action.triggered.connect(lambda: self.command_registry.execute("edit.paste"))
+
         self.find_action = QAction("Localizar", self)
         self.find_action.setShortcut(Shortcuts.FIND)
         self.find_action.triggered.connect(self._show_search_panel)
@@ -230,7 +240,8 @@ class JCodeMainWindow(QMainWindow):
         # Adiciona ações à janela para que os atalhos sejam globais
         self.addActions([
             self.new_file_action, self.save_action, self.undo_action, self.redo_action,
-            self.find_action, self.toggle_sidebar_action, self.show_help_action,
+            self.cut_action, self.copy_action, self.paste_action, self.find_action, 
+            self.toggle_sidebar_action, self.show_help_action,
             self.close_tab_action,
             self.refresh_explorer_action, self.next_tab_action, self.prev_tab_action
         ])
@@ -265,6 +276,11 @@ class JCodeMainWindow(QMainWindow):
         # Comandos de Histórico
         r.register("edit.undo", lambda: get_active_buffer_and_execute("undo"))
         r.register("edit.redo", lambda: get_active_buffer_and_execute("redo"))
+
+        # Comandos de Área de Transferência
+        r.register("edit.cut", self._cut_selection)
+        r.register("edit.copy", self._copy_selection)
+        r.register("edit.paste", self._paste_from_clipboard)
         
         r.register("view.command_palette", self.command_palette.show_palette)
         r.register("view.find", self._show_search_panel)
@@ -400,6 +416,30 @@ class JCodeMainWindow(QMainWindow):
         if self.active_editor and find_text:
             self.search_manager.replace_all(self.active_editor.buffer, find_text, replace_text, case_sensitive)
             self._on_buffer_modified()
+
+    def _copy_selection(self):
+        """Copia o texto selecionado para a área de transferência."""
+        if self.active_editor and self.active_editor.buffer:
+            buffer = self.active_editor.buffer
+            selected_texts = [buffer.get_selected_text(i) for i in range(len(buffer.cursors))]
+            non_empty = [text for text in selected_texts if text]
+            if non_empty:
+                QApplication.clipboard().setText("\n".join(non_empty))
+
+    def _cut_selection(self):
+        """Recorta o texto selecionado."""
+        if self.active_editor and self.active_editor.buffer:
+            self._copy_selection()
+            self.active_editor.buffer.delete_selection()
+            self._on_buffer_modified()
+
+    def _paste_from_clipboard(self):
+        """Cola o texto da área de transferência."""
+        if self.active_editor and self.active_editor.buffer:
+            text = QApplication.clipboard().text()
+            if text:
+                self.active_editor.buffer.insert_text(text)
+                self._on_buffer_modified()
 
     def _save_file(self):
         if not self.active_editor:

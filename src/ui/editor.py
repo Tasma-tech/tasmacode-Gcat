@@ -47,6 +47,7 @@ class CodeEditor(QAbstractScrollArea):
         
         # Estado de interação
         self._is_dragging = False
+        self._last_click_was_double = False
         
         # Destaques da busca
         self.search_highlights = []
@@ -70,48 +71,63 @@ class CodeEditor(QAbstractScrollArea):
         else:
             super().keyPressEvent(event)
 
-    def _toggle_blink(self):
-        self.blink_state = not self.blink_state
-        self.viewport().update() # Solicita repaint
-
     def mousePressEvent(self, event):
         """Trata o clique do mouse para posicionar o cursor."""
+        if self._last_click_was_double:
+            self._last_click_was_double = False
+            # É um clique triplo
+            if not self.buffer: return
+            pos = event.position()
+            scroll_y = self.verticalScrollBar().value()
+            target_line = int((pos.y() + scroll_y) // self.line_height)
+            
+            self.buffer.clear_cursors()
+            self.buffer.select_line_at(target_line)
+            self._is_dragging = True
+            self.viewport().update()
+            event.accept()
+            return
+
+        self._last_click_was_double = False
         if not self.buffer: return
         
-        # 1. Mapeamento de Coordenadas (Pixel -> Texto)
-        # Subtrai a margem do viewport para alinhar corretamente
         pos = event.position()
-        x = pos.x()
-        y = pos.y()
-        
+        x, y = pos.x(), pos.y()
         scroll_y = self.verticalScrollBar().value()
-        
-        # Cálculo da linha e coluna
-        # line = (y + scroll) // altura_linha
         target_line = int((y + scroll_y) // self.line_height)
-        
-        # col = x // largura_char (arredondando para o mais próximo)
         target_col = int((x / self.char_width) + 0.5)
         
-        # 2. Lógica de Modificadores (Shift = Seleção, Ctrl = Multi-cursor)
         modifiers = event.modifiers()
         keep_anchor = bool(modifiers & Qt.KeyboardModifier.ShiftModifier)
         is_multi = bool(modifiers & Qt.KeyboardModifier.ControlModifier)
         
         if not is_multi:
             self.buffer.clear_cursors()
-            if not keep_anchor:
-                # Se não for seleção nem multi, adiciona novo cursor limpo
-                self.buffer.cursors = [] # Limpa tudo
-                self.buffer.add_cursor(target_line, target_col)
-            else:
-                # Se for seleção (Shift), atualiza apenas a ponta do cursor atual
-                self.buffer.update_last_cursor(target_line, target_col, keep_anchor=True)
-        else:
-            self.buffer.add_cursor(target_line, target_col)
+        
+        self.buffer.update_last_cursor(target_line, target_col, keep_anchor=keep_anchor)
             
         self._is_dragging = True
         self.viewport().update()
+
+    def _toggle_blink(self):
+        self.blink_state = not self.blink_state
+        self.viewport().update() # Solicita repaint
+
+    def mouseDoubleClickEvent(self, event):
+        """Trata o clique duplo para selecionar uma palavra."""
+        self._last_click_was_double = True
+        if not self.buffer: return
+
+        pos = event.position()
+        scroll_y = self.verticalScrollBar().value()
+        target_line = int((pos.y() + scroll_y) // self.line_height)
+        target_col = int((pos.x() / self.char_width) + 0.5)
+
+        self.buffer.clear_cursors()
+        self.buffer.select_word_at(target_line, target_col)
+        self._is_dragging = True
+        self.viewport().update()
+        event.accept()
 
     def mouseMoveEvent(self, event):
         """Trata o arrasto do mouse para seleção de texto."""
@@ -185,6 +201,7 @@ class CodeEditor(QAbstractScrollArea):
         painter = QPainter(self.viewport())
         painter.setFont(self.font)
         
+        
         # Cores do tema
         bg_color = QColor(self.theme.get_color("background"))
         fg_color = QColor(self.theme.get_color("foreground"))
@@ -192,6 +209,7 @@ class CodeEditor(QAbstractScrollArea):
         guide_color = QColor(self.theme.get_color("indent_guide"))
         search_hl_color = QColor(self.theme.get_color("accent"))
         search_hl_color.setAlpha(80) # Semi-transparente
+        selection_color = QColor(self.theme.get_color("selection"))
         
         # Preenche fundo
         painter.fillRect(event.rect(), bg_color)
@@ -208,6 +226,28 @@ class CodeEditor(QAbstractScrollArea):
         
         # Posições dos cursores para destaque de linha
         active_lines = {c.line for c in self.buffer.cursors}
+
+        # --- Desenha a Seleção (antes de todo o resto) ---
+        for i in range(len(self.buffer.cursors)):
+            selection_range = self.buffer.get_selection_range(i)
+            if not selection_range:
+                continue
+
+            (start_line, start_col), (end_line, end_col) = selection_range
+
+            # Itera apenas sobre as linhas visíveis que estão na seleção
+            visible_start = max(start_line, first_line)
+            visible_end = min(end_line, first_line + lines_visible)
+
+            for line_idx in range(visible_start, visible_end + 1):
+                y = (line_idx * self.line_height) - scroll_y
+                
+                sel_start_x = start_col * self.char_width if line_idx == start_line else 0
+                sel_end_x = end_col * self.char_width if line_idx == end_line else self.viewport().width()
+                
+                sel_width = sel_end_x - sel_start_x
+                if sel_width > 0:
+                    painter.fillRect(int(sel_start_x), int(y), int(sel_width), self.line_height, selection_color)
         
         # Desenha Texto
         for i, line_text in enumerate(lines):

@@ -96,13 +96,47 @@ class DocumentBuffer:
             cursor.anchor_line = line
             cursor.anchor_col = col
 
+    def has_selection(self, cursor_index: int = -1) -> bool:
+        """Verifica se um cursor específico tem uma seleção ativa."""
+        if not self.cursors or cursor_index >= len(self.cursors): return False
+        cursor = self.cursors[cursor_index]
+        return (cursor.line, cursor.col) != (cursor.anchor_line, cursor.anchor_col)
+
+    def get_selection_range(self, cursor_index: int = -1) -> Optional[Tuple[Tuple[int, int], Tuple[int, int]]]:
+        """Retorna o intervalo (início, fim) ordenado da seleção para um cursor."""
+        if not self.has_selection(cursor_index): return None
+        cursor = self.cursors[cursor_index]
+
+        start_pos = (cursor.anchor_line, cursor.anchor_col)
+        end_pos = (cursor.line, cursor.col)
+
+        return (start_pos, end_pos) if start_pos <= end_pos else (end_pos, start_pos)
+
+    def get_selected_text(self, cursor_index: int = -1) -> str:
+        """Retorna o texto selecionado para um cursor específico."""
+        range_ = self.get_selection_range(cursor_index)
+        if not range_: return ""
+
+        (start_line, start_col), (end_line, end_col) = range_
+
+        if start_line == end_line:
+            return self._lines[start_line][start_col:end_col]
+        else:
+            selected_lines = [self._lines[start_line][start_col:]]
+            selected_lines.extend(self._lines[start_line + 1:end_line])
+            selected_lines.append(self._lines[end_line][:end_col])
+            return "\n".join(selected_lines)
+
     def clear_cursors(self) -> None:
         """Remove todos os cursores extras, mantendo apenas o principal (último)."""
         if self.cursors:
             self.cursors = [self.cursors[-1]]
 
     def insert_text(self, text: str) -> None:
-        """Insere texto em TODOS os cursores ativos simultaneamente."""
+        """Insere texto em todos os cursores. Se houver seleção, ela é substituída."""
+        if any(self.has_selection(i) for i in range(len(self.cursors))):
+            self.delete_selection()
+
         # Salva estado para Undo (simplificado)
         cursors_snapshot = copy.deepcopy(self.cursors)
         
@@ -242,7 +276,13 @@ class DocumentBuffer:
         self.cursors = new_cursors
 
     def delete_backspace(self) -> None:
-        """Executa backspace em todos os cursores."""
+        """Executa backspace. Se houver seleção, deleta a seleção."""
+        if any(self.has_selection(i) for i in range(len(self.cursors))):
+            self.delete_selection()
+            self.dirty = True
+            self._redo_stack.clear()
+            return
+
         # Ordena reverso para não invalidar índices
         sorted_cursors = sorted(
             self.cursors, 
@@ -256,6 +296,42 @@ class DocumentBuffer:
         # TODO: Store deleted text for undo
         self.dirty = True
         self._redo_stack.clear()
+
+    def delete_selection(self) -> None:
+        """Deleta a seleção para todos os cursores."""
+        sorted_indices = sorted(
+            range(len(self.cursors)),
+            key=lambda i: self.get_selection_range(i) or ((0,0),(0,0)),
+            reverse=True
+        )
+
+        for i in sorted_indices:
+            self._delete_single_selection(i)
+        
+        self._merge_cursors()
+
+    def _delete_single_selection(self, cursor_index: int):
+        """Lógica interna para deletar a seleção de um único cursor."""
+        range_ = self.get_selection_range(cursor_index)
+        if not range_: return
+
+        (start_line, start_col), (end_line, end_col) = range_
+
+        first_line_content = self._lines[start_line]
+        last_line_content = self._lines[end_line]
+
+        # Junta o início da primeira linha com o fim da última
+        self._lines[start_line] = first_line_content[:start_col] + last_line_content[end_col:]
+
+        # Deleta linhas intermediárias
+        lines_deleted = end_line - start_line
+        if lines_deleted > 0:
+            del self._lines[start_line + 1 : end_line + 1]
+
+        # Reposiciona e limpa a seleção do cursor
+        cursor = self.cursors[cursor_index]
+        cursor.line, cursor.col = start_line, start_col
+        cursor.anchor_line, cursor.anchor_col = start_line, start_col
 
     def _delete_char_at(self, cursor: Cursor) -> None:
         line = cursor.line
@@ -316,6 +392,31 @@ class DocumentBuffer:
             if abs(current_line - line) > 1000: break
             
         return None
+
+    def select_word_at(self, line: int, col: int):
+        """Seleciona a palavra na posição do cursor."""
+        if line >= len(self._lines): return
+        line_text = self._lines[line]
+        if col > len(line_text): return
+
+        separators = " \t\n\r.,:;()[]{}<>'\"`~-="
+
+        start = col
+        while start > 0 and line_text[start - 1] not in separators:
+            start -= 1
+
+        end = col
+        while end < len(line_text) and line_text[end] not in separators:
+            end += 1
+
+        self.update_last_cursor(line, end)
+        self.cursors[-1].anchor_col = start
+
+    def select_line_at(self, line: int):
+        """Seleciona a linha inteira."""
+        if line >= len(self._lines): return
+        self.update_last_cursor(line, len(self._lines[line]))
+        self.cursors[-1].anchor_col = 0
 
     def undo(self):
         """Desfaz a última ação."""
