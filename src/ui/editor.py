@@ -359,8 +359,13 @@ class CodeEditor(QAbstractScrollArea):
         cr = self.contentsRect()
         self.line_number_area.setGeometry(QRect(cr.left(), cr.top(), self.line_number_area_width(), cr.height()))
         
+        self.line_number_area.update()
         # O ViewportController cuidará dos limites, mas precisamos emitir sinal ou chamar update
+        self.line_number_area.update()
         self._setup_font()
 
     def _setup_font(self):
+        self.verticalScrollBar().valueChanged.connect(self.line_number_area.update)
+        self.verticalScrollBar().valueChanged.connect(self._update_line_number_area_width)
+        self._update_line_number_area_width()
         pass # Já configurado no init
