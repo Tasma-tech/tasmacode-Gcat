@@ -33,7 +33,8 @@ class ViewportController(QObject):
         total_height = buffer.line_count * line_height
         
         # Define o range do scrollbar (em pixels)
-        self._editor.verticalScrollBar().setRange(0, total_height - self._editor.viewport().height())
+        max_scroll = max(0, total_height - self._editor.viewport().height())
+        self._editor.verticalScrollBar().setRange(0, max_scroll)
         self._editor.verticalScrollBar().setSingleStep(line_height)
 
     def _calculate_visible_area(self):

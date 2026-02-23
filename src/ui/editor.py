@@ -43,6 +43,9 @@ class CodeEditor(QAbstractScrollArea):
         
         # Padding visual (Margens internas)
         self.setViewportMargins(10, 10, 10, 10)
+        
+        # Estado de interação
+        self._is_dragging = False
 
     def set_dependencies(self, buffer, theme_manager, highlighter):
         self.buffer = buffer
@@ -62,6 +65,69 @@ class CodeEditor(QAbstractScrollArea):
     def _toggle_blink(self):
         self.blink_state = not self.blink_state
         self.viewport().update() # Solicita repaint
+
+    def mousePressEvent(self, event):
+        """Trata o clique do mouse para posicionar o cursor."""
+        if not self.buffer: return
+        
+        # 1. Mapeamento de Coordenadas (Pixel -> Texto)
+        # Subtrai a margem do viewport para alinhar corretamente
+        pos = event.position()
+        x = pos.x()
+        y = pos.y()
+        
+        scroll_y = self.verticalScrollBar().value()
+        
+        # Cálculo da linha e coluna
+        # line = (y + scroll) // altura_linha
+        target_line = int((y + scroll_y) // self.line_height)
+        
+        # col = x // largura_char (arredondando para o mais próximo)
+        target_col = int((x / self.char_width) + 0.5)
+        
+        # 2. Lógica de Modificadores (Shift = Seleção, Ctrl = Multi-cursor)
+        modifiers = event.modifiers()
+        keep_anchor = bool(modifiers & Qt.KeyboardModifier.ShiftModifier)
+        is_multi = bool(modifiers & Qt.KeyboardModifier.ControlModifier)
+        
+        if not is_multi:
+            self.buffer.clear_cursors()
+            if not keep_anchor:
+                # Se não for seleção nem multi, adiciona novo cursor limpo
+                self.buffer.cursors = [] # Limpa tudo
+                self.buffer.add_cursor(target_line, target_col)
+            else:
+                # Se for seleção (Shift), atualiza apenas a ponta do cursor atual
+                self.buffer.update_last_cursor(target_line, target_col, keep_anchor=True)
+        else:
+            self.buffer.add_cursor(target_line, target_col)
+            
+        self._is_dragging = True
+        self.viewport().update()
+
+    def mouseMoveEvent(self, event):
+        """Trata o arrasto do mouse para seleção de texto."""
+        if not self.buffer or not self._is_dragging: return
+        
+        pos = event.position()
+        scroll_y = self.verticalScrollBar().value()
+        
+        target_line = int((pos.y() + scroll_y) // self.line_height)
+        target_col = int((pos.x() / self.char_width) + 0.5)
+        
+        # Atualiza o cursor mantendo a âncora original (seleção)
+        self.buffer.update_last_cursor(target_line, target_col, keep_anchor=True)
+        
+        # Auto-scroll se arrastar para fora da área visível
+        if pos.y() < 0:
+            self.verticalScrollBar().setValue(self.verticalScrollBar().value() - self.line_height)
+        elif pos.y() > self.viewport().height():
+            self.verticalScrollBar().setValue(self.verticalScrollBar().value() + self.line_height)
+        
+        self.viewport().update()
+
+    def mouseReleaseEvent(self, event):
+        self._is_dragging = False
 
     def paintEvent(self, event):
         """Renderiza o texto e os cursores."""

@@ -7,6 +7,12 @@ class Cursor:
     """Representa uma posição no texto (linha, coluna)."""
     line: int
     col: int
+    anchor_line: Optional[int] = None
+    anchor_col: Optional[int] = None
+
+    def __post_init__(self):
+        if self.anchor_line is None: self.anchor_line = self.line
+        if self.anchor_col is None: self.anchor_col = self.col
 
     def as_tuple(self) -> Tuple[int, int]:
         return (self.line, self.col)
@@ -62,6 +68,26 @@ class DocumentBuffer:
             if c.line == line and c.col == col:
                 return
         self.cursors.append(Cursor(line, col))
+
+    def update_last_cursor(self, line: int, col: int, keep_anchor: bool = False) -> None:
+        """Atualiza a posição do último cursor (principal).
+        
+        Args:
+            keep_anchor: Se True, mantém a âncora original (seleção). Se False, reseta a âncora.
+        """
+        if not self.cursors: return
+        
+        # Validação de limites (Clamping)
+        line = max(0, min(line, len(self._lines) - 1))
+        col = max(0, min(col, len(self._lines[line])))
+        
+        cursor = self.cursors[-1]
+        cursor.line = line
+        cursor.col = col
+        
+        if not keep_anchor:
+            cursor.anchor_line = line
+            cursor.anchor_col = col
 
     def clear_cursors(self) -> None:
         """Remove todos os cursores extras, mantendo apenas o principal (último)."""
