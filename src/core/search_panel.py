@@ -1,13 +1,13 @@
-from PySide6.QtWidgets import QWidget, QHBoxLayout, QLineEdit, QPushButton
+from PySide6.QtWidgets import QWidget, QHBoxLayout, QLineEdit, QPushButton, QCheckBox
 from PySide6.QtCore import Signal
 
 class SearchPanel(QWidget):
     """A panel for find and replace operations."""
     
     # Signals
-    find_next = Signal(str, bool)
-    replace_one = Signal(str, str, bool)
-    replace_all = Signal(str, str, bool)
+    find_next = Signal(str, bool, bool) # text, case_sensitive, whole_word
+    replace_one = Signal(str, str, bool, bool)
+    replace_all = Signal(str, str, bool, bool)
     closed = Signal()
 
     def __init__(self, parent=None):
@@ -35,6 +35,10 @@ class SearchPanel(QWidget):
             QPushButton:hover {
                 background-color: #4f4f4f;
             }
+            QCheckBox {
+                color: #cccccc;
+                spacing: 5px;
+            }
         """)
 
         layout = QHBoxLayout(self)
@@ -47,31 +51,46 @@ class SearchPanel(QWidget):
         self.replace_input = QLineEdit()
         self.replace_input.setPlaceholderText("Replace")
 
+        self.check_whole_word = QCheckBox("Whole Word")
+        
+        self.btn_find_next = QPushButton("Find Next")
+        self.btn_replace = QPushButton("Replace")
         self.btn_replace_all = QPushButton("Replace All")
         
         self.btn_close = QPushButton("X")
         self.btn_close.setFixedWidth(24)
 
         layout.addWidget(self.find_input)
+        layout.addWidget(self.btn_find_next)
         layout.addWidget(self.replace_input)
+        layout.addWidget(self.btn_replace)
         layout.addWidget(self.btn_replace_all)
+        layout.addWidget(self.check_whole_word)
         layout.addStretch()
         layout.addWidget(self.btn_close)
         
         # Connections
         self.btn_close.clicked.connect(self.closed.emit)
+        self.btn_find_next.clicked.connect(self._on_find_next)
+        self.btn_replace.clicked.connect(self._on_replace_one)
         self.btn_replace_all.clicked.connect(self._on_replace_all)
         self.find_input.textChanged.connect(self._on_find_text_changed)
         
         self.hide()
 
     def _on_find_text_changed(self, text):
-        self.find_next.emit(text, False)
+        self.find_next.emit(text, False, self.check_whole_word.isChecked())
+
+    def _on_find_next(self):
+        self.find_next.emit(self.find_input.text(), False, self.check_whole_word.isChecked())
+
+    def _on_replace_one(self):
+        self.replace_one.emit(self.find_input.text(), self.replace_input.text(), False, self.check_whole_word.isChecked())
 
     def _on_replace_all(self):
         find_text = self.find_input.text()
         replace_text = self.replace_input.text()
-        self.replace_all.emit(find_text, replace_text, False)
+        self.replace_all.emit(find_text, replace_text, False, self.check_whole_word.isChecked())
 
     def show_panel(self):
         self.show()

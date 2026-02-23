@@ -1,6 +1,7 @@
 from src.core.editor_logic.buffer import DocumentBuffer
 from typing import List, Tuple
 from collections import defaultdict
+import re
 
 class SearchManager:
     """Manages search and replace operations within a DocumentBuffer."""
@@ -12,7 +13,7 @@ class SearchManager:
     def set_root_path(self, path: str):
         self.root_path = path
 
-    def find_all(self, buffer: DocumentBuffer, text: str, case_sensitive: bool = False) -> List[Tuple[int, int, int]]:
+    def find_all(self, buffer: DocumentBuffer, text: str, case_sensitive: bool = False, whole_word: bool = False) -> List[Tuple[int, int, int]]:
         """
         Finds all occurrences of a text string in the buffer.
         Returns a list of tuples: (line_index, start_col, length).
@@ -22,17 +23,22 @@ class SearchManager:
             return []
 
         results = []
-        search_text = text if case_sensitive else text.lower()
+        
+        # Configura Regex
+        flags = 0 if case_sensitive else re.IGNORECASE
+        pattern_str = re.escape(text)
+        if whole_word:
+            pattern_str = r'\b' + pattern_str + r'\b'
+        
+        try:
+            regex = re.compile(pattern_str, flags)
+        except re.error:
+            return [] # Regex inválido (embora re.escape deva prevenir)
         
         for i, line in enumerate(buffer.lines):
-            line_to_search = line if case_sensitive else line.lower()
-            start = 0
-            while True:
-                start = line_to_search.find(search_text, start)
-                if start == -1:
-                    break
-                results.append((i, start, len(text)))
-                start += 1 # Move to next character to find overlapping matches
+            for match in regex.finditer(line):
+                start, end = match.span()
+                results.append((i, start, end - start))
         
         self.highlights = results
         return results
@@ -40,16 +46,17 @@ class SearchManager:
     def clear_highlights(self):
         self.highlights = []
 
-    def replace_all(self, buffer: DocumentBuffer, find_text: str, replace_text: str, case_sensitive: bool = False):
+    def replace_all(self, buffer: DocumentBuffer, find_text: str, replace_text: str, case_sensitive: bool = False, whole_word: bool = False) -> int:
         """
         Performs a replace-all operation and makes it undoable as a single block.
+        Returns the number of replacements made.
         """
         if not find_text:
-            return
+            return 0
 
-        occurrences = self.find_all(buffer, find_text, case_sensitive)
+        occurrences = self.find_all(buffer, find_text, case_sensitive, whole_word)
         if not occurrences:
-            return
+            return 0
 
         text_before = buffer.get_text()
         cursors_before = [c.copy() for c in buffer.cursors]
@@ -67,3 +74,4 @@ class SearchManager:
         
         buffer.replace_full_text(text_before, "\n".join(new_lines), cursors_before)
         self.clear_highlights()
+        return len(occurrences)

@@ -1,6 +1,6 @@
 import sys
 import os
-from PySide6.QtWidgets import QApplication, QMainWindow, QWidget, QVBoxLayout, QSplitter, QFileDialog
+from PySide6.QtWidgets import QApplication, QMainWindow, QWidget, QVBoxLayout, QSplitter, QFileDialog, QInputDialog
 from PySide6.QtGui import QKeySequence
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QTextCursor, QAction, QKeySequence
@@ -211,6 +211,10 @@ class JCodeMainWindow(QMainWindow):
         self.find_action.setShortcut(Shortcuts.FIND)
         self.find_action.triggered.connect(self._show_search_panel)
 
+        self.rename_action = QAction("Renomear Variável", self)
+        self.rename_action.setShortcut(Shortcuts.RENAME)
+        self.rename_action.triggered.connect(self._quick_rename)
+
         # --- View Actions ---
         self.toggle_sidebar_action = QAction("Alternar Barra Lateral", self)
         self.toggle_sidebar_action.setShortcut(Shortcuts.TOGGLE_SIDEBAR)
@@ -240,7 +244,7 @@ class JCodeMainWindow(QMainWindow):
         # Adiciona ações à janela para que os atalhos sejam globais
         self.addActions([
             self.new_file_action, self.save_action, self.undo_action, self.redo_action,
-            self.cut_action, self.copy_action, self.paste_action, self.find_action, 
+            self.cut_action, self.copy_action, self.paste_action, self.find_action, self.rename_action,
             self.toggle_sidebar_action, self.show_help_action,
             self.close_tab_action,
             self.refresh_explorer_action, self.next_tab_action, self.prev_tab_action
@@ -296,6 +300,7 @@ class JCodeMainWindow(QMainWindow):
         
         r.register("view.command_palette", self.command_palette.show_palette)
         r.register("view.find", self._show_search_panel)
+        r.register("edit.rename", self._quick_rename)
         r.register("file.save", self._save_file)
         r.register("file.save_as", self._save_file_as)
 
@@ -343,6 +348,7 @@ class JCodeMainWindow(QMainWindow):
         # Conexões do Painel de Busca
         self.search_panel.closed.connect(self._hide_search_panel)
         self.search_panel.find_next.connect(self._on_find)
+        self.search_panel.replace_one.connect(self._on_replace_one)
         self.search_panel.replace_all.connect(self._on_replace_all)
 
     def _on_active_editor_changed(self, editor_widget):
@@ -416,18 +422,70 @@ class JCodeMainWindow(QMainWindow):
             self.active_editor.search_highlights = []
             self.active_editor.viewport().update()
 
-    def _on_find(self, text, case_sensitive):
+    def _on_find(self, text, case_sensitive, whole_word):
         if not self.active_editor or not text:
             self._hide_search_panel()
             return
-        highlights = self.search_manager.find_all(self.active_editor.buffer, text, case_sensitive)
+        highlights = self.search_manager.find_all(self.active_editor.buffer, text, case_sensitive, whole_word)
         self.active_editor.search_highlights = highlights
         self.active_editor.viewport().update()
+        
+        # Feedback se não encontrar nada
+        if not highlights:
+            self.custom_statusbar.flash_message("Nenhum resultado encontrado.", color="#dc3545")
 
-    def _on_replace_all(self, find_text, replace_text, case_sensitive):
-        if self.active_editor and find_text:
-            self.search_manager.replace_all(self.active_editor.buffer, find_text, replace_text, case_sensitive)
+    def _on_replace_one(self, find_text, replace_text, case_sensitive, whole_word):
+        """Substitui a seleção atual se corresponder, ou busca a próxima."""
+        if not self.active_editor or not find_text: return
+        
+        buffer = self.active_editor.buffer
+        # Verifica se o texto selecionado é o que queremos substituir
+        current_selection = buffer.get_selected_text()
+        
+        if current_selection == find_text:
+            # Substitui
+            buffer.insert_text(replace_text)
             self._on_buffer_modified()
+            # Busca o próximo
+            self._on_find(find_text, case_sensitive, whole_word)
+        else:
+            # Apenas busca o próximo (o usuário precisa clicar de novo para substituir)
+            # TODO: Implementar navegação de cursor para o próximo match
+            self._on_find(find_text, case_sensitive, whole_word)
+            self.custom_statusbar.flash_message("Próxima ocorrência localizada. Clique novamente para substituir.", color="#007acc")
+
+    def _on_replace_all(self, find_text, replace_text, case_sensitive, whole_word):
+        if self.active_editor and find_text:
+            count = self.search_manager.replace_all(self.active_editor.buffer, find_text, replace_text, case_sensitive, whole_word)
+            self._on_buffer_modified()
+            self.custom_statusbar.flash_message(f"{count} ocorrências substituídas.", color="#28a745")
+
+    def _quick_rename(self):
+        """Atalho F2: Renomeia a variável sob o cursor em todo o arquivo."""
+        if not self.active_editor or not self.active_editor.buffer: return
+        
+        buffer = self.active_editor.buffer
+        
+        # Tenta pegar seleção ou palavra sob cursor
+        initial_text = buffer.get_selected_text()
+        if not initial_text:
+            # Seleciona palavra sob cursor se não houver seleção
+            cursor = buffer.cursors[-1]
+            buffer.select_word_at(cursor.line, cursor.col)
+            initial_text = buffer.get_selected_text()
+            self.active_editor.viewport().update()
+            
+        if not initial_text:
+            self.custom_statusbar.flash_message("Nenhuma palavra selecionada para renomear.", color="#dc3545")
+            return
+
+        new_text, ok = QInputDialog.getText(self, "Renomear Variável", f"Renomear '{initial_text}' para:", text=initial_text)
+        
+        if ok and new_text and new_text != initial_text:
+            # Executa substituição global com limite de palavra (Whole Word)
+            count = self.search_manager.replace_all(buffer, initial_text, new_text, case_sensitive=True, whole_word=True)
+            self._on_buffer_modified()
+            self.custom_statusbar.flash_message(f"Renomeado '{initial_text}' para '{new_text}' em {count} lugares.", color="#28a745")
 
     def _copy_selection(self):
         """Copia o texto selecionado para a área de transferência."""

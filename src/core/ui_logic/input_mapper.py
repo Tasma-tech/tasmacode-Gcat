@@ -37,7 +37,9 @@ class InputMapper(QObject):
             # Undo / Redo
             "Ctrl+Z": "edit.undo",
             "Ctrl+Y": "edit.redo",
-            "Ctrl+Shift+Z": "edit.redo"
+            "Ctrl+Shift+Z": "edit.redo",
+            # Rename
+            "F2": "edit.rename"
         }
 
     def handle_key(self, event: QKeyEvent) -> bool:

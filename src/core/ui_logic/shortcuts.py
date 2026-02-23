@@ -19,6 +19,7 @@ class Shortcuts:
     COPY = QKeySequence.StandardKey.Copy
     PASTE = QKeySequence.StandardKey.Paste
     FIND = QKeySequence.StandardKey.Find
+    RENAME = "F2"
     
     # Interface e Navegação
     TOGGLE_SIDEBAR = "Ctrl+B"
