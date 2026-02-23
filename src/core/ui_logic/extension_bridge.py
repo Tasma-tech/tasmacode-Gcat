@@ -2,12 +2,39 @@ import os
 import sys
 import importlib.util
 import logging
+import traceback
 from typing import Dict, List, Callable, Any
 from PySide6.QtCore import QObject, Signal
 
 # Configuração básica de log
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("ExtensionBridge")
+
+class EditorAPI:
+    """Interface segura para plugins interagirem com o editor.
+    
+    Encapsula o acesso ao Core e UI, prevenindo que plugins quebrem a aplicação.
+    """
+    def __init__(self, insert_fn, get_text_fn, add_menu_fn, log_fn):
+        self._insert_fn = insert_fn
+        self._get_text_fn = get_text_fn
+        self._add_menu_fn = add_menu_fn
+        self._log_fn = log_fn
+
+    def insert_text(self, text: str):
+        if self._insert_fn: self._insert_fn(text)
+
+    def get_full_text(self) -> str:
+        return self._get_text_fn() if self._get_text_fn else ""
+
+    def add_menu_action(self, label: str, callback: Callable[['EditorAPI'], None]):
+        """Registra uma ação no menu. O callback recebe esta API como argumento."""
+        if self._add_menu_fn:
+            # Envolvemos o callback para injetar 'self' (a API)
+            self._add_menu_fn(label, lambda: callback(self))
+
+    def log(self, message: str):
+        if self._log_fn: self._log_fn(message)
 
 class ExtensionBridge(QObject):
     """Gerencia o carregamento de plugins e o sistema de Hooks.
@@ -18,6 +45,7 @@ class ExtensionBridge(QObject):
 
     # Sinais para notificar a UI sobre mudanças no estado dos plugins
     plugin_loaded = Signal(str)
+    plugin_error = Signal(str, str)
     
     def __init__(self):
         super().__init__()
@@ -28,6 +56,7 @@ class ExtensionBridge(QObject):
             "on_app_start": []
         }
         self._plugins: Dict[str, Any] = {}
+        self._loaded_modules: Dict[str, Any] = {} # Módulos carregados mas não ativados
 
     def register_hook(self, hook_name: str, callback: Callable) -> None:
         """Registra uma função callback em um hook específico.
@@ -87,16 +116,31 @@ class ExtensionBridge(QObject):
                 module = importlib.util.module_from_spec(spec)
                 spec.loader.exec_module(module)
                 
-                # Protocolo: O plugin deve ter uma função 'register'
-                if hasattr(module, "register"):
-                    module.register(self)
-                    self._plugins[plugin_name] = module
-                    self.plugin_loaded.emit(plugin_name)
-                    logger.info(f"Plugin carregado com sucesso: {plugin_name}")
+                # Validação: Verifica se possui o ponto de entrada obrigatório
+                if hasattr(module, "plugin_main"):
+                    self._loaded_modules[plugin_name] = module
+                    logger.info(f"Plugin carregado (pendente ativação): {plugin_name}")
                 else:
-                    logger.warning(f"Plugin {plugin_name} ignorado: função 'register' não encontrada.")
+                    logger.warning(f"Plugin {plugin_name} ignorado: função 'plugin_main' não encontrada.")
         except Exception as e:
             logger.error(f"Falha ao carregar plugin {plugin_name}: {e}")
+            self.plugin_error.emit(plugin_name, str(e))
+
+    def activate_plugins(self, insert_fn, get_text_fn, add_menu_fn, log_fn) -> None:
+        """Fase 2: Ativa todos os plugins carregados, injetando a API."""
+        for name, module in self._loaded_modules.items():
+            try:
+                # Cria uma instância da API para este plugin
+                api = EditorAPI(insert_fn, get_text_fn, add_menu_fn, log_fn)
+                module.plugin_main(api)
+                self._plugins[name] = module
+                self.plugin_loaded.emit(name)
+                logger.info(f"Plugin ativado com sucesso: {name}")
+            except Exception as e:
+                logger.error(f"Erro Crítico ao ativar plugin {name}: {e}")
+                traceback.print_exc()
+                self.plugin_error.emit(name, str(e))
+                # Não adicionamos ao registro de plugins ativos
 
     def get_loaded_plugins(self) -> List[str]:
         """Retorna lista de nomes dos plugins carregados."""

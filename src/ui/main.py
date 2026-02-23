@@ -168,6 +168,9 @@ class JCodeMainWindow(QMainWindow):
         menu_bar.addMenu("&Ferramentas")
         menu_bar.addMenu("&Ajuda")
 
+        # --- Menu Plugins (Dinâmico) ---
+        self.plugins_menu = menu_bar.addMenu("&Plugins")
+
     def _register_core_commands(self):
         """Registra os comandos fundamentais do editor."""
         def get_active_buffer_and_execute(func_name, *args, **kwargs):
@@ -355,8 +358,41 @@ class JCodeMainWindow(QMainWindow):
         self.extension_bridge.plugin_loaded.connect(
             lambda name: self.custom_statusbar.showMessage(f"Plugin carregado: {name}", 3000)
         )
+        self.extension_bridge.plugin_error.connect(
+            lambda name, err: self.custom_statusbar.showMessage(f"Erro no plugin {name}: {err}", 10000)
+        )
         
+        # Fase 1: Load (Importação)
         self.extension_bridge.load_plugins(plugins_path)
+        
+        # Fase 2: Activate (Execução com API)
+        self.extension_bridge.activate_plugins(
+            insert_fn=self._api_insert_text,
+            get_text_fn=self._api_get_text,
+            add_menu_fn=self._api_add_menu,
+            log_fn=self._api_log
+        )
+
+    # --- Implementação da EditorAPI ---
+    def _api_insert_text(self, text):
+        if self.active_editor and self.active_editor.buffer:
+            self.active_editor.buffer.insert_text(text)
+            self._on_buffer_modified()
+
+    def _api_get_text(self):
+        if self.active_editor and self.active_editor.buffer:
+            return self.active_editor.buffer.get_text()
+        return ""
+
+    def _api_add_menu(self, label, callback):
+        """Adiciona uma ação ao menu de Plugins."""
+        action = QAction(label, self)
+        # O callback já vem envolvido pelo EditorAPI para não precisar de args
+        action.triggered.connect(callback)
+        self.plugins_menu.addAction(action)
+
+    def _api_log(self, message):
+        self.custom_statusbar.showMessage(f"[Plugin] {message}", 5000)
 
     def _load_session(self):
         """Carrega a lista de arquivos da sessão anterior."""
