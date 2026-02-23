@@ -278,8 +278,16 @@ class JCodeMainWindow(QMainWindow):
         r.register("cursor.add_down", lambda: get_active_buffer_and_execute("add_cursor_relative", 1))
         
         # Comandos de Histórico
-        r.register("edit.undo", lambda: get_active_buffer_and_execute("undo"))
-        r.register("edit.redo", lambda: get_active_buffer_and_execute("redo"))
+        def safe_undo():
+            if self.active_editor and self.active_editor.buffer and self.active_editor.buffer.can_undo:
+                get_active_buffer_and_execute("undo")
+        
+        def safe_redo():
+            if self.active_editor and self.active_editor.buffer and self.active_editor.buffer.can_redo:
+                get_active_buffer_and_execute("redo")
+
+        r.register("edit.undo", safe_undo)
+        r.register("edit.redo", safe_redo)
 
         # Comandos de Área de Transferência
         r.register("edit.cut", self._cut_selection)
