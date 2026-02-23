@@ -23,6 +23,7 @@ from src.core.ui_logic.input_mapper import InputMapper
 from src.core.ui_logic.event_handler import EventHandler
 from src.core.ui_logic.viewport_controller import ViewportController
 from src.core.search_panel import SearchPanel
+from src.core.project_launcher import ProjectLauncher
 from src.ui.editor import CodeEditor
 from src.ui.sidebar import Sidebar
 from src.ui.statusbar import StatusBar
@@ -300,6 +301,7 @@ class JCodeMainWindow(QMainWindow):
         
         r.register("view.command_palette", self.command_palette.show_palette)
         r.register("view.find", self._show_search_panel)
+        r.register("view.switch_project", self._show_project_launcher)
         r.register("edit.rename", self._quick_rename)
         r.register("file.save", self._save_file)
         r.register("file.save_as", self._save_file_as)
@@ -408,9 +410,7 @@ class JCodeMainWindow(QMainWindow):
         """Abre diálogo para selecionar pasta."""
         folder = QFileDialog.getExistingDirectory(self, "Abrir Pasta")
         if folder:
-            self.sidebar.set_root_path(folder)
-            # Salva como último diretório aberto na sessão
-            self.session_manager.save_session(folder, [], None)
+            self._load_project(folder)
 
     def _show_search_panel(self):
         if self.active_editor:
@@ -421,6 +421,30 @@ class JCodeMainWindow(QMainWindow):
         if self.active_editor:
             self.active_editor.search_highlights = []
             self.active_editor.viewport().update()
+
+    def _show_project_launcher(self):
+        """Exibe o diálogo de troca rápida de projetos."""
+        session = self.session_manager.load_session()
+        recent = session.get("recent_projects", [])
+        
+        launcher = ProjectLauncher(recent, self)
+        launcher.project_selected.connect(self._load_project)
+        
+        # Centraliza na janela
+        geo = self.geometry()
+        x = geo.x() + (geo.width() - launcher.width()) // 2
+        y = geo.y() + 100
+        launcher.move(x, y)
+        launcher.exec()
+
+    def _load_project(self, path):
+        """Carrega um projeto e atualiza a sessão."""
+        self.sidebar.set_root_path(path)
+        self.search_manager.set_root_path(path)
+        self.setWindowTitle(f"JCode - {os.path.basename(path)}")
+        # Salva sessão para atualizar a lista de recentes e o last_directory
+        self.session_manager.save_session(path, [], None)
+        self.custom_statusbar.showMessage(f"Projeto carregado: {path}", 3000)
 
     def _on_find(self, text, case_sensitive, whole_word):
         if not self.active_editor or not text:

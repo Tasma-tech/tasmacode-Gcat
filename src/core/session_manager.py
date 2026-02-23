@@ -17,7 +17,8 @@ class SessionManager:
         return {
             "last_directory": None,
             "open_files": [],
-            "active_file": None
+            "active_file": None,
+            "recent_projects": []
         }
 
     def save_session(self, root_path: Optional[str], open_files_data: List[Dict[str, Any]], active_file_path: Optional[str]):
@@ -25,8 +26,22 @@ class SessionManager:
         Saves the current session state to a JSON file.
         open_files_data: [{'path': str, 'cursor': {'line': int, 'col': int}}]
         """
+        # Carrega sessão anterior para preservar histórico
+        previous_session = self.load_session()
+        recent_projects = previous_session.get("recent_projects", [])
+
         session_data = self._get_default_session()
         session_data["last_directory"] = root_path
+        
+        # Atualiza lista de projetos recentes
+        if root_path:
+            if root_path in recent_projects:
+                recent_projects.remove(root_path)
+            recent_projects.insert(0, root_path)
+            # Mantém apenas os 15 mais recentes
+            recent_projects = recent_projects[:15]
+        
+        session_data["recent_projects"] = recent_projects
 
         if root_path:
             relative_files = []

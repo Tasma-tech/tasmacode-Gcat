@@ -39,7 +39,9 @@ class InputMapper(QObject):
             "Ctrl+Y": "edit.redo",
             "Ctrl+Shift+Z": "edit.redo",
             # Rename
-            "F2": "edit.rename"
+            "F2": "edit.rename",
+            # Project
+            "Ctrl+R": "view.switch_project"
         }
 
     def handle_key(self, event: QKeyEvent) -> bool:

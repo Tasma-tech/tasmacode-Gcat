@@ -27,6 +27,7 @@ class Shortcuts:
     NEXT_TAB = "Ctrl+Tab"
     PREV_TAB = "Ctrl+Shift+Tab"
     COMMAND_PALETTE = "Ctrl+Shift+P"
+    SWITCH_PROJECT = "Ctrl+R"
     
     # Ajuda
     HELP = "F1"
