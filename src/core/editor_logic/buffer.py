@@ -231,8 +231,12 @@ class DocumentBuffer:
             for other in self.cursors:
                 if other is not cursor and other.line > line_idx:
                     other.line += lines_added
+        
+        # Atualiza a âncora para coincidir com o cursor (evita seleção do texto inserido)
+        cursor.anchor_line = cursor.line
+        cursor.anchor_col = cursor.col
 
-    def move_cursors(self, d_line: int, d_col: int) -> None:
+    def move_cursors(self, d_line: int, d_col: int, keep_anchor: bool = False) -> None:
         """Move todos os cursores por um deslocamento (delta)."""
         for cursor in self.cursors:
             new_line = cursor.line + d_line
@@ -247,6 +251,10 @@ class DocumentBuffer:
             
             cursor.line = new_line
             cursor.col = new_col
+            
+            if not keep_anchor:
+                cursor.anchor_line = new_line
+                cursor.anchor_col = new_col
             
         # Remove cursores sobrepostos após o movimento
         self._merge_cursors()

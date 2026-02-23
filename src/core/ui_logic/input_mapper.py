@@ -23,13 +23,21 @@ class InputMapper(QObject):
             "Down": "cursor.move_down",
             "Left": "cursor.move_left",
             "Right": "cursor.move_right",
+            "Shift+Up": "cursor.select_up",
+            "Shift+Down": "cursor.select_down",
+            "Shift+Left": "cursor.select_left",
+            "Shift+Right": "cursor.select_right",
             "Alt+Up": "cursor.add_up",
             "Alt+Down": "cursor.add_down",
             "Backspace": "edit.backspace",
             "Return": "edit.new_line",
             "Tab": "edit.indent",
             # Exemplo de Chord
-            "Ctrl+K, Ctrl+C": "editor.comment_line"
+            "Ctrl+K, Ctrl+C": "editor.comment_line",
+            # Undo / Redo
+            "Ctrl+Z": "edit.undo",
+            "Ctrl+Y": "edit.redo",
+            "Ctrl+Shift+Z": "edit.redo"
         }
 
     def handle_key(self, event: QKeyEvent) -> bool:
