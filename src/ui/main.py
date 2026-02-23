@@ -358,7 +358,7 @@ class JCodeMainWindow(QMainWindow):
         FileManager._write_sync(file_path, content)
         self.active_editor.buffer.dirty = False
         self._on_buffer_modified()
-        self.custom_statusbar.showMessage(f"Arquivo salvo: {file_path}", 3000)
+        self.custom_statusbar.flash_message(f"Arquivo salvo: {os.path.basename(file_path)}", color="#28a745")
 
     def _save_file_as(self):
         if not self.active_editor:
@@ -395,9 +395,9 @@ class JCodeMainWindow(QMainWindow):
             editor.setProperty("event_handler", handler) # Mantém referência
 
             self.editor_group.add_editor(editor, path)
-            self.custom_statusbar.showMessage(f"Arquivo aberto: {os.path.basename(path)}", 5000)
+            self.custom_statusbar.flash_message(f"Arquivo aberto: {os.path.basename(path)}", color="#007acc")
         except Exception as e:
-            self.custom_statusbar.showMessage(f"Erro ao abrir o arquivo: {e}", 5000)
+            self.custom_statusbar.flash_message(f"Erro ao abrir: {e}", color="#dc3545")
 
     def _on_buffer_modified(self):
         """Atualiza o widget CodeEditor com o conteúdo do DocumentBuffer."""
@@ -448,7 +448,7 @@ class JCodeMainWindow(QMainWindow):
             lambda name: self.custom_statusbar.showMessage(f"Plugin carregado: {name}", 3000)
         )
         self.extension_bridge.plugin_error.connect(
-            lambda name, err: self.custom_statusbar.showMessage(f"Erro no plugin {name}: {err}", 10000)
+            lambda name, err: self.custom_statusbar.flash_message(f"Erro no plugin {name}: {err}", color="#dc3545")
         )
         
         # Fase 1: Load (Importação)
@@ -506,6 +506,13 @@ class JCodeMainWindow(QMainWindow):
                     open_files.append(file_path)
         with open(session_file, 'w') as f:
             f.write('\n'.join(open_files))
+
+    def _on_active_editor_changed(self, editor_widget):
+        self.active_editor = editor_widget
+        if editor_widget:
+            self.event_handler.buffer = editor_widget.buffer
+            self.viewport_controller.attach_to(editor_widget)
+        self._on_buffer_modified()
 
 def main():
     """Ponto de entrada da aplicação."""
