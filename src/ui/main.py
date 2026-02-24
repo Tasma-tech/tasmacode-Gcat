@@ -32,6 +32,7 @@ from src.ui.statusbar import StatusBar
 from src.ui.editor_group import EditorGroup
 from src.ui.command_palette import CommandPalette
 from src.ui.video_player import VideoPlayer
+from src.ui.image_viewer import ImageViewer
 from src.core.ui_logic.help_window import HelpWindow
 from src.core.ui_logic.shortcuts import Shortcuts
 
@@ -662,8 +663,13 @@ class JCodeMainWindow(QMainWindow):
 
         # Verifica se é arquivo de mídia
         _, ext = os.path.splitext(path)
-        if ext.lower() in ['.mp4', '.avi', '.mkv', '.mov', '.webm', '.mp3']:
+        ext = ext.lower()
+        if ext in ['.mp4', '.avi', '.mkv', '.mov', '.webm', '.mp3']:
             self._open_media_file(path)
+            return
+            
+        if ext in ['.png', '.jpg', '.jpeg', '.gif', '.bmp', '.webp', '.ico', '.svg', '.tif', '.tiff']:
+            self._open_image_file(path)
             return
 
         # Usando a versão síncrona do FileManager para simplicidade na UI
@@ -706,6 +712,17 @@ class JCodeMainWindow(QMainWindow):
             self.custom_statusbar.flash_message(f"Mídia aberta: {os.path.basename(path)}", color="#007acc")
         except Exception as e:
             self.custom_statusbar.flash_message(f"Erro ao abrir mídia: {e}", color="#dc3545")
+
+    def _open_image_file(self, path):
+        try:
+            viewer = ImageViewer()
+            viewer.load_file(path)
+            viewer.setProperty("file_path", path)
+            
+            self.editor_group.add_editor(viewer, path)
+            self.custom_statusbar.flash_message(f"Imagem aberta: {os.path.basename(path)}", color="#007acc")
+        except Exception as e:
+            self.custom_statusbar.flash_message(f"Erro ao abrir imagem: {e}", color="#dc3545")
 
     def _on_buffer_modified(self):
 
