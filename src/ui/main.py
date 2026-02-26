@@ -32,9 +32,12 @@ from src.ui.statusbar import StatusBar
 from src.ui.editor_group import EditorGroup
 from src.ui.command_palette import CommandPalette
 from src.ui.video_player import VideoPlayer
+from src.ui.pdf_viewer import PdfViewer
 from src.ui.image_viewer import ImageViewer
 from src.core.ui_logic.help_window import HelpWindow
 from src.core.ui_logic.shortcuts import Shortcuts
+from src.core.ui_logic.about_info import AboutInfo
+from src.ui.about_window import AboutWindow
 
 class JCodeMainWindow(QMainWindow):
     """Janela principal do editor JCODE.
@@ -182,6 +185,7 @@ class JCodeMainWindow(QMainWindow):
         help_menu.addAction("Configurações", self._show_settings_dialog)
         help_menu.addSeparator()
         help_menu.addAction(self.show_help_action)
+        help_menu.addAction(self.about_action)
 
         # --- Menu Plugins (Dinâmico) ---
         self.plugins_menu = menu_bar.addMenu("&Plugins")
@@ -267,6 +271,9 @@ class JCodeMainWindow(QMainWindow):
         self.show_help_action = QAction("Guia de Atalhos", self)
         self.show_help_action.setShortcut(Shortcuts.HELP)
         self.show_help_action.triggered.connect(self._show_help_window)
+
+        self.about_action = QAction("Sobre o JCode", self)
+        self.about_action.triggered.connect(self._show_about_dialog)
 
         # Adiciona ações à janela para que os atalhos sejam globais
         self.addActions([
@@ -443,6 +450,11 @@ class JCodeMainWindow(QMainWindow):
         """Exibe a janela de ajuda sólida."""
         help_win = HelpWindow(self)
         help_win.exec()
+
+    def _show_about_dialog(self):
+        info = AboutInfo()
+        dlg = AboutWindow(info, root_dir, self)
+        dlg.exec()
 
     def _close_current_tab(self):
         """Fecha a aba atual com segurança."""
@@ -672,6 +684,10 @@ class JCodeMainWindow(QMainWindow):
             self._open_image_file(path)
             return
 
+        if ext == '.pdf':
+            self._open_pdf_file(path)
+            return
+
         # Usando a versão síncrona do FileManager para simplicidade na UI
         try:
             content = FileManager._read_sync(path, 'utf-8')
@@ -723,6 +739,17 @@ class JCodeMainWindow(QMainWindow):
             self.custom_statusbar.flash_message(f"Imagem aberta: {os.path.basename(path)}", color="#007acc")
         except Exception as e:
             self.custom_statusbar.flash_message(f"Erro ao abrir imagem: {e}", color="#dc3545")
+
+    def _open_pdf_file(self, path):
+        try:
+            viewer = PdfViewer()
+            viewer.load_file(path)
+            viewer.setProperty("file_path", path)
+            
+            self.editor_group.add_editor(viewer, path)
+            self.custom_statusbar.flash_message(f"PDF aberto: {os.path.basename(path)}", color="#007acc")
+        except Exception as e:
+            self.custom_statusbar.flash_message(f"Erro ao abrir PDF: {e}", color="#dc3545")
 
     def _on_buffer_modified(self):
 
