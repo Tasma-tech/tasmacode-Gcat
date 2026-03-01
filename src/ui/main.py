@@ -1,6 +1,6 @@
 import sys
 import os
-from PySide6.QtWidgets import QApplication, QMainWindow, QWidget, QVBoxLayout, QSplitter, QFileDialog, QInputDialog, QMessageBox
+from PySide6.QtWidgets import QApplication, QMainWindow, QWidget, QVBoxLayout, QSplitter, QFileDialog, QInputDialog, QMessageBox, QMenu
 from PySide6.QtGui import QKeySequence
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QTextCursor, QAction, QKeySequence, QCursor
