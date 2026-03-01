@@ -28,6 +28,7 @@ from src.core.config_manager import ConfigManager
 from src.ui.settings_dialog import SettingsDialog
 from src.ui.editor import CodeEditor
 from src.ui.sidebar import Sidebar
+from src.ui.right_sidebar import RightSidebar
 from src.ui.statusbar import StatusBar
 from src.ui.editor_group import EditorGroup
 from src.ui.command_palette import CommandPalette
@@ -105,6 +106,7 @@ class JCodeMainWindow(QMainWindow):
         """Configura os widgets da interface."""
         # Componentes principais
         self.sidebar = Sidebar()
+        self.right_sidebar = RightSidebar()
         self.editor_group = EditorGroup()
         
         self.custom_statusbar = StatusBar()
@@ -126,10 +128,14 @@ class JCodeMainWindow(QMainWindow):
         self.main_splitter = QSplitter(Qt.Orientation.Horizontal)
         self.main_splitter.addWidget(self.sidebar)
         self.main_splitter.addWidget(content_widget)
+        self.main_splitter.addWidget(self.right_sidebar)
         
         # Define proporção inicial (20% Sidebar, 80% Editor)
         self.main_splitter.setStretchFactor(0, 1)
         self.main_splitter.setStretchFactor(1, 4)
+        self.main_splitter.setStretchFactor(2, 0) # Right sidebar começa oculta/pequena
+        
+        self.right_sidebar.hide() # Começa oculta
         
         self.setCentralWidget(self.main_splitter)
 
@@ -261,6 +267,10 @@ class JCodeMainWindow(QMainWindow):
         self.toggle_sidebar_action.setShortcut(Shortcuts.TOGGLE_SIDEBAR)
         self.toggle_sidebar_action.triggered.connect(self._toggle_sidebar)
 
+        self.toggle_right_sidebar_action = QAction("Alternar Barra Direita (Git)", self)
+        self.toggle_right_sidebar_action.setShortcut(Shortcuts.TOGGLE_RIGHT_SIDEBAR)
+        self.toggle_right_sidebar_action.triggered.connect(self._toggle_right_sidebar)
+
         self.focus_sidebar_search_action = QAction("Focar Busca na Sidebar", self)
         self.focus_sidebar_search_action.setShortcut(Shortcuts.FOCUS_SIDEBAR_SEARCH)
         self.focus_sidebar_search_action.triggered.connect(self._focus_sidebar_search)
@@ -293,7 +303,7 @@ class JCodeMainWindow(QMainWindow):
         self.addActions([
             self.new_file_action, self.save_action, self.undo_action, self.redo_action,
             self.cut_action, self.copy_action, self.paste_action, self.find_action, self.rename_action, self.switch_project_action,
-            self.toggle_sidebar_action, self.focus_sidebar_search_action, self.show_help_action,
+            self.toggle_sidebar_action, self.toggle_right_sidebar_action, self.focus_sidebar_search_action, self.show_help_action,
             self.close_tab_action,
             self.refresh_explorer_action, self.next_tab_action, self.prev_tab_action
         ])
@@ -382,6 +392,7 @@ class JCodeMainWindow(QMainWindow):
         """Registra todos os comandos disponíveis na paleta de comandos."""
         # Registra comandos básicos
         self.command_palette.register_command("Exibir: Alternar Barra Lateral", self.toggle_sidebar_action.trigger)
+        self.command_palette.register_command("Exibir: Alternar Barra Direita (Git)", self.toggle_right_sidebar_action.trigger)
         self.command_palette.register_command("Exibir: Focar Busca na Sidebar", self._focus_sidebar_search)
         self.command_palette.register_command("Arquivo: Salvar", self._save_file)
         self.command_palette.register_command("File: New File", self._create_new_file)
@@ -478,6 +489,10 @@ class JCodeMainWindow(QMainWindow):
         print("DEBUG: Atalho Ctrl+B acionado, alternando sidebar.")
         if self.sidebar is not None:
             self.sidebar.setVisible(not self.sidebar.isVisible())
+
+    def _toggle_right_sidebar(self):
+        if self.right_sidebar is not None:
+            self.right_sidebar.setVisible(not self.right_sidebar.isVisible())
 
     def _focus_sidebar_search(self):
         if self.sidebar:
@@ -633,6 +648,7 @@ class JCodeMainWindow(QMainWindow):
 
         self.sidebar.set_root_path(path)
         self.search_manager.set_root_path(path)
+        self.right_sidebar.load_repo(path) # Atualiza a sidebar direita (Git)
         self.setWindowTitle(f"JCode - {os.path.basename(path)}")
         
         self.session_manager.add_to_history(path)
