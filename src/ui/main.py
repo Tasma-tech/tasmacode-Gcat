@@ -472,7 +472,8 @@ class JCodeMainWindow(QMainWindow):
             "restore_session": "Restaurar Sessão Anterior",
             "server_address": "Endereço do Servidor Local",
             "live_server_port": "Porta do Live Server",
-            "live_server_open_browser": "Abrir Navegador (Live Server)"
+            "live_server_open_browser": "Abrir Navegador (Live Server)",
+            "enable_autocomplete": "Habilitar Autocomplete (Beta)"
         }
 
         for key, desc in setting_descriptions.items():
@@ -540,6 +541,10 @@ class JCodeMainWindow(QMainWindow):
         """Verifica se o autocomplete deve ser acionado."""
         editor = self.sender()
         if not editor or editor is not self.active_editor:
+            return
+
+        # Verifica se o autocomplete está habilitado nas configurações
+        if not getattr(editor, "autocomplete_enabled", False):
             return
 
         if not editor.buffer or not editor.autocomplete_manager:

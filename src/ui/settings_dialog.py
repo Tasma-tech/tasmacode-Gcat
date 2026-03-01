@@ -57,11 +57,20 @@ class SettingsDialog(QDialog):
         chk_indent = QCheckBox("Auto-indentação")
         chk_indent.setChecked(self.current_config.get('auto_indent'))
         chk_indent.toggled.connect(lambda v: (self._update_local('auto_indent', v), self._apply_live()))
+        
+        chk_autocomplete = QCheckBox("Habilitar Autocomplete (Beta)")
+        chk_autocomplete.setChecked(self.current_config.get('enable_autocomplete', False))
+        chk_autocomplete.toggled.connect(lambda v: (self._update_local('enable_autocomplete', v), self._apply_live()))
+        
+        lbl_beta = QLabel("Nota: Funcionalidade em testes beta. Pode apresentar instabilidade.")
+        lbl_beta.setStyleSheet("color: #808080; font-style: italic; font-size: 11px; margin-left: 20px;")
 
         editor_layout.addWidget(lbl_font)
         editor_layout.addWidget(slider_font)
         editor_layout.addWidget(chk_lines)
         editor_layout.addWidget(chk_indent)
+        editor_layout.addWidget(chk_autocomplete)
+        editor_layout.addWidget(lbl_beta)
         editor_layout.addStretch()
 
         # --- Configuração da Aba Interface ---

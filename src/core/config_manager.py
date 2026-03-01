@@ -24,7 +24,8 @@ class ConfigManager(QObject):
             "restore_session": True,
             "server_address": "http://localhost:5000",
             "live_server_port": 0,
-            "live_server_open_browser": True
+            "live_server_open_browser": True,
+            "enable_autocomplete": False
         }
         self.config = self.load_config()
 

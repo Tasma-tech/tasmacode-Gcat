@@ -25,6 +25,7 @@ class CodeEditor(QAbstractScrollArea):
         self.autocomplete_widget = None
         self.show_line_numbers = True
         self.auto_indent = True
+        self.autocomplete_enabled = False
         
         # Configuração de Fonte e Métricas
         # Tenta usar fontes modernas, fallback para Monospace genérico
@@ -269,6 +270,7 @@ class CodeEditor(QAbstractScrollArea):
         # Preferências
         self.show_line_numbers = settings.get("line_numbers", True)
         self.auto_indent = settings.get("auto_indent", True)
+        self.autocomplete_enabled = settings.get("enable_autocomplete", False)
         
         # Recalcula layout
         self._update_line_number_area_width()
