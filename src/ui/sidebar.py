@@ -1,11 +1,28 @@
 from PySide6.QtWidgets import (QWidget, QVBoxLayout, QLabel, QPushButton, QLineEdit,
                                QTreeView, QFileSystemModel, QHBoxLayout, 
                                QStackedWidget, QFrame, QStyle, QMenu, QMessageBox, QInputDialog)
-from PySide6.QtCore import Qt, Signal, QDir, QEvent
+from PySide6.QtCore import Qt, Signal, QDir, QEvent, QSortFilterProxyModel, QRegularExpression
 from PySide6.QtGui import QIcon
 import os
 import shutil
 from src.core.editor_logic.file_manager import FileManager
+
+class FileFilterProxyModel(QSortFilterProxyModel):
+    """Proxy model to ignore specific files/folders and filter by text."""
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.ignored_names = {'.git', '__pycache__', '.vscode', '.idea', '.DS_Store'}
+
+    def filterAcceptsRow(self, source_row, source_parent):
+        source_index = self.sourceModel().index(source_row, 0, source_parent)
+        if not source_index.isValid():
+            return False
+
+        file_name = self.sourceModel().fileName(source_index)
+        if file_name in self.ignored_names:
+            return False
+
+        return super().filterAcceptsRow(source_row, source_parent)
 
 class Sidebar(QWidget):
     """Barra lateral para explorador de arquivos e ferramentas."""
@@ -51,6 +68,14 @@ class Sidebar(QWidget):
         
         self.layout.addWidget(self.toolbar)
 
+        # --- Filtro de Busca ---
+        self.search_input = QLineEdit()
+        self.search_input.setPlaceholderText("Filtrar arquivos (Ctrl+Shift+F)")
+        self.search_input.setStyleSheet("padding: 4px; background-color: #3c3c3c; border: none; margin: 0 5px 5px 5px;")
+        self.search_input.textChanged.connect(self._on_filter_text_changed)
+        self.search_input.installEventFilter(self)
+        self.layout.addWidget(self.search_input)
+
         # --- Área Principal (Stack) ---
         self.stack = QStackedWidget()
         self.layout.addWidget(self.stack)
@@ -71,12 +96,19 @@ class Sidebar(QWidget):
 
         # Estado 2: Árvore de Arquivos
         self.file_model = QFileSystemModel()
+        self.file_model.setFilter(QDir.Filter.AllEntries | QDir.Filter.NoDotAndDotDot)
         self.file_model.setRootPath(QDir.homePath())
         self.file_model.setReadOnly(False) # Permite operações de escrita (Drag & Drop)
         
+        # Modelo de proxy para filtragem
+        self.filter_proxy_model = FileFilterProxyModel()
+        self.filter_proxy_model.setSourceModel(self.file_model)
+        self.filter_proxy_model.setFilterCaseSensitivity(Qt.CaseSensitivity.CaseInsensitive)
+        self.filter_proxy_model.setRecursiveFilteringEnabled(True)
+        
         self.tree = QTreeView()
-        self.tree.setModel(self.file_model)
-        self.tree.setRootIndex(self.file_model.index(QDir.homePath()))
+        self.tree.setModel(self.filter_proxy_model)
+        self.tree.setRootIndex(self.filter_proxy_model.mapFromSource(self.file_model.index(QDir.homePath())))
         self.tree.setHeaderHidden(True)
         self.tree.setColumnHidden(1, True) # Size
         self.tree.setColumnHidden(2, True) # Type
@@ -123,27 +155,38 @@ class Sidebar(QWidget):
     def set_root_path(self, path: str):
         """Define a pasta raiz da árvore."""
         self.stack.setCurrentWidget(self.tree)
-        self.file_model.setRootPath(path)
-        self.tree.setRootIndex(self.file_model.index(path))
+        source_index = self.file_model.setRootPath(path)
+        proxy_index = self.filter_proxy_model.mapFromSource(source_index)
+        self.tree.setRootIndex(proxy_index)
+
+    def focus_search(self):
+        """Foca na barra de busca da sidebar."""
+        self.search_input.setFocus()
+        self.search_input.selectAll()
 
     def _on_tree_double_click(self, index):
-        path = self.file_model.filePath(index)
-        if not self.file_model.isDir(index):
+        source_index = self.filter_proxy_model.mapToSource(index)
+        path = self.file_model.filePath(source_index)
+        if not self.file_model.isDir(source_index):
             self.file_clicked.emit(path)
 
     def _get_current_path(self):
         """Retorna o diretório base para criação (pasta selecionada ou pai do arquivo)."""
-        index = self.tree.currentIndex()
+        proxy_index = self.tree.currentIndex()
+        source_index = self.filter_proxy_model.mapToSource(proxy_index)
         root = self.file_model.rootPath()
         
-        if not index.isValid():
+        if not source_index.isValid():
             return root
             
-        path = self.file_model.filePath(index)
-        if self.file_model.isDir(index):
+        path = self.file_model.filePath(source_index)
+        if self.file_model.isDir(source_index):
             return path
         else:
             return os.path.dirname(path)
+
+    def _on_filter_text_changed(self, text: str):
+        self.filter_proxy_model.setFilterWildcard(f"*{text}*")
 
     def _start_creation(self, is_folder: bool):
         """Inicia o processo de criação mostrando o input."""
@@ -154,8 +197,8 @@ class Sidebar(QWidget):
         self._creation_base_path = self._get_current_path()
         
         # Posicionamento do Input
-        index = self.tree.currentIndex()
-        rect = self.tree.visualRect(index)
+        proxy_index = self.tree.currentIndex()
+        rect = self.tree.visualRect(proxy_index)
         
         # Se não houver seleção ou rect inválido, posiciona no topo
         if not rect.isValid():
@@ -200,18 +243,23 @@ class Sidebar(QWidget):
         pass
 
     def eventFilter(self, obj, event):
-        if obj == self.input_edit and event.type() == QEvent.Type.KeyPress:
+        if hasattr(self, 'input_edit') and obj == self.input_edit and event.type() == QEvent.Type.KeyPress:
             if event.key() == Qt.Key.Key_Escape:
                 self.input_edit.hide()
+                return True
+        if obj == self.search_input and event.type() == QEvent.Type.KeyPress:
+            if event.key() == Qt.Key.Key_Escape:
+                self.search_input.clear()
                 return True
         return super().eventFilter(obj, event)
 
     def _show_context_menu(self, position):
-        index = self.tree.indexAt(position)
-        if not index.isValid():
+        proxy_index = self.tree.indexAt(position)
+        if not proxy_index.isValid():
             return
 
-        path = self.file_model.filePath(index)
+        source_index = self.filter_proxy_model.mapToSource(proxy_index)
+        path = self.file_model.filePath(source_index)
         menu = QMenu()
 
         # Ações de Arquivo

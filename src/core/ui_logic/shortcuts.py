@@ -24,6 +24,7 @@ class Shortcuts:
     # Interface e Navegação
     TOGGLE_SIDEBAR = "Ctrl+B"
     REFRESH_EXPLORER = "F5"
+    FOCUS_SIDEBAR_SEARCH = "Ctrl+Shift+F"
     NEXT_TAB = "Ctrl+Tab"
     PREV_TAB = "Ctrl+Shift+Tab"
     COMMAND_PALETTE = "Ctrl+Shift+P"

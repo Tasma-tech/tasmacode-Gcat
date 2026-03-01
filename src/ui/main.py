@@ -77,6 +77,8 @@ class JCodeMainWindow(QMainWindow):
         
         self._setup_ui()
         self._create_actions()
+        self._setup_commands()
+        self._register_core_commands()
         self._create_menu_bar()
         self._setup_logic_connections()
         
@@ -109,8 +111,6 @@ class JCodeMainWindow(QMainWindow):
         self.setStatusBar(self.custom_statusbar)
         
         self.command_palette = CommandPalette(self)
-        self._setup_commands()
-        self._register_core_commands()
         
         # Layout de Conteúdo (Vertical: SearchPanel | EditorGroup)
         content_widget = QWidget()
@@ -261,6 +261,10 @@ class JCodeMainWindow(QMainWindow):
         self.toggle_sidebar_action.setShortcut(Shortcuts.TOGGLE_SIDEBAR)
         self.toggle_sidebar_action.triggered.connect(self._toggle_sidebar)
 
+        self.focus_sidebar_search_action = QAction("Focar Busca na Sidebar", self)
+        self.focus_sidebar_search_action.setShortcut(Shortcuts.FOCUS_SIDEBAR_SEARCH)
+        self.focus_sidebar_search_action.triggered.connect(self._focus_sidebar_search)
+
         self.toggle_fullscreen_action = QAction("Tela Cheia", self)
         self.toggle_fullscreen_action.setCheckable(True)
         self.toggle_fullscreen_action.triggered.connect(lambda checked: self.showFullScreen() if checked else self.showNormal())
@@ -289,7 +293,7 @@ class JCodeMainWindow(QMainWindow):
         self.addActions([
             self.new_file_action, self.save_action, self.undo_action, self.redo_action,
             self.cut_action, self.copy_action, self.paste_action, self.find_action, self.rename_action, self.switch_project_action,
-            self.toggle_sidebar_action, self.show_help_action,
+            self.toggle_sidebar_action, self.focus_sidebar_search_action, self.show_help_action,
             self.close_tab_action,
             self.refresh_explorer_action, self.next_tab_action, self.prev_tab_action
         ])
@@ -372,13 +376,36 @@ class JCodeMainWindow(QMainWindow):
         action.triggered.connect(self.command_palette.show_palette)
         self.addAction(action)
         
+        self._register_palette_commands()
+
+    def _register_palette_commands(self):
+        """Registra todos os comandos disponíveis na paleta de comandos."""
         # Registra comandos básicos
-        self.command_palette.register_command("Editor: Toggle Sidebar", lambda: self.sidebar.setVisible(not self.sidebar.isVisible()))
-        self.command_palette.register_command("File: Save", lambda: print("Save triggered"))
+        self.command_palette.register_command("Exibir: Alternar Barra Lateral", self.toggle_sidebar_action.trigger)
+        self.command_palette.register_command("Exibir: Focar Busca na Sidebar", self._focus_sidebar_search)
+        self.command_palette.register_command("Arquivo: Salvar", self._save_file)
         self.command_palette.register_command("File: New File", self._create_new_file)
         self.command_palette.register_command("File: New Folder", self._create_new_folder)
         self.command_palette.register_command("File: Open Folder", self._open_project_dialog)
         self.command_palette.register_command("Preferences: Settings", self._show_settings_dialog)
+        
+        # Registra as configurações para busca global
+        setting_descriptions = {
+            "font_size": "Tamanho da Fonte",
+            "line_numbers": "Exibir Números de Linha",
+            "auto_indent": "Auto-indentação",
+            "theme": "Tema Visual",
+            "restore_session": "Restaurar Sessão Anterior",
+            "server_address": "Endereço do Servidor Local",
+            "live_server_port": "Porta do Live Server",
+            "live_server_open_browser": "Abrir Navegador (Live Server)"
+        }
+
+        for key, desc in setting_descriptions.items():
+            command_name = f"Config: {desc}"
+            current_value = self.config_manager.get(key)
+            tags = [key, str(current_value)]
+            self.command_palette.register_command(command_name, self._show_settings_dialog, search_tags=tags)
 
     def _setup_logic_connections(self):
         """Conecta a lógica de UI aos widgets."""
@@ -451,6 +478,12 @@ class JCodeMainWindow(QMainWindow):
         print("DEBUG: Atalho Ctrl+B acionado, alternando sidebar.")
         if self.sidebar is not None:
             self.sidebar.setVisible(not self.sidebar.isVisible())
+
+    def _focus_sidebar_search(self):
+        if self.sidebar:
+            if not self.sidebar.isVisible():
+                self.sidebar.setVisible(True)
+            self.sidebar.focus_search()
 
     def _create_new_file(self):
         print("DEBUG: Atalho Ctrl+N acionado, novo arquivo.")

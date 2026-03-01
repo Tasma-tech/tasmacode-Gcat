@@ -1,5 +1,5 @@
 from PySide6.QtWidgets import QDialog, QVBoxLayout, QLineEdit, QListWidget, QListWidgetItem
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import Qt
 
 class CommandPalette(QDialog):
     """Janela flutuante para busca e execução de comandos (Ctrl+Shift+P)."""
@@ -18,20 +18,28 @@ class CommandPalette(QDialog):
         self.search_input.textChanged.connect(self._filter_commands)
         
         self.list_widget = QListWidget()
-        self.list_widget.setStyleSheet("background-color: #252526; border: none;")
+        self.list_widget.setStyleSheet("""
+            QListWidget { background-color: #252526; border: none; color: #cccccc; }
+            QListWidget::item:selected { background-color: #007acc; color: white; }
+            QListWidget::item:hover { background-color: #2a2d2e; }
+        """)
         self.list_widget.itemActivated.connect(self._execute_command)
         
         layout.addWidget(self.search_input)
         layout.addWidget(self.list_widget)
         
-        self.commands = {} # "Nome": callback
+        self.commands = [] # Lista de dicionários: {'name': str, 'callback': callable, 'tags': list}
 
-    def register_command(self, name, callback):
-        self.commands[name] = callback
+    def register_command(self, name: str, callback, search_tags: list = None):
+        """Registra um comando com um nome, uma função de callback e tags de busca opcionais."""
+        if search_tags is None:
+            search_tags = []
+        self.commands.append({'name': name, 'callback': callback, 'tags': search_tags})
 
     def show_palette(self):
         self.search_input.clear()
         self._populate_list()
+        self.list_widget.setCurrentRow(0)
         # Centraliza na janela pai
         if self.parent():
             geo = self.parent().geometry()
@@ -43,16 +51,41 @@ class CommandPalette(QDialog):
 
     def _populate_list(self):
         self.list_widget.clear()
-        for name in self.commands:
-            self.list_widget.addItem(name)
+        # Ordena comandos por nome para consistência
+        self.commands.sort(key=lambda c: c['name'])
+        for cmd_data in self.commands:
+            self.list_widget.addItem(cmd_data['name'])
 
     def _filter_commands(self, text):
-        for i in range(self.list_widget.count()):
+        lower_text = text.lower()
+        if not lower_text:
+            # Se o campo de busca estiver vazio, mostra tudo
+            for i in range(self.list_widget.count()):
+                self.list_widget.item(i).setHidden(False)
+            return
+
+        for i, cmd_data in enumerate(self.commands):
             item = self.list_widget.item(i)
-            item.setHidden(text.lower() not in item.text().lower())
+            
+            name = cmd_data['name'].lower()
+            
+            # Lógica Fuzzy: verifica se os caracteres de busca aparecem na ordem correta
+            it = iter(name)
+            is_match = all(char in it for char in lower_text)
+            
+            # Busca nas tags se não encontrou no nome
+            if not is_match:
+                for tag in cmd_data.get('tags', []):
+                    if lower_text in str(tag).lower():
+                        is_match = True
+                        break
+            
+            item.setHidden(not is_match)
 
     def _execute_command(self, item):
         cmd_name = item.text()
-        if cmd_name in self.commands:
-            self.commands[cmd_name]()
-            self.close()
+        for cmd_data in self.commands:
+            if cmd_data['name'] == cmd_name:
+                cmd_data['callback']()
+                self.close()
+                return
