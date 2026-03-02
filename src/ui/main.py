@@ -1117,7 +1117,8 @@ class JCodeMainWindow(QMainWindow):
             insert_fn=self._api_insert_text,
             get_text_fn=self._api_get_text,
             add_menu_fn=self._api_add_menu,
-            log_fn=self._api_log
+            log_fn=self._api_log,
+            get_editor_fn=lambda: self.active_editor
         )
 
     # --- Implementação da EditorAPI ---

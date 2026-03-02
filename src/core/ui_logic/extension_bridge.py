@@ -15,11 +15,12 @@ class EditorAPI:
     
     Encapsula o acesso ao Core e UI, prevenindo que plugins quebrem a aplicação.
     """
-    def __init__(self, insert_fn, get_text_fn, add_menu_fn, log_fn):
+    def __init__(self, insert_fn, get_text_fn, add_menu_fn, log_fn, get_editor_fn=None):
         self._insert_fn = insert_fn
         self._get_text_fn = get_text_fn
         self._add_menu_fn = add_menu_fn
         self._log_fn = log_fn
+        self._get_editor_fn = get_editor_fn
 
     def insert_text(self, text: str):
         if self._insert_fn: self._insert_fn(text)
@@ -35,6 +36,10 @@ class EditorAPI:
 
     def log(self, message: str):
         if self._log_fn: self._log_fn(message)
+
+    def get_active_editor(self):
+        """Retorna a instância do editor ativo (CodeEditor)."""
+        return self._get_editor_fn() if self._get_editor_fn else None
 
 class ExtensionBridge(QObject):
     """Gerencia o carregamento de plugins e o sistema de Hooks.
@@ -98,9 +103,15 @@ class ExtensionBridge(QObject):
         # Adiciona o diretório ao path para facilitar imports relativos nos plugins
         sys.path.append(plugins_dir)
 
-        for filename in os.listdir(plugins_dir):
-            if filename.endswith(".py") and not filename.startswith("__"):
-                self._load_single_plugin(plugins_dir, filename)
+        for item_name in os.listdir(plugins_dir):
+            item_path = os.path.join(plugins_dir, item_name)
+            
+            # Carrega arquivos .py soltos
+            if os.path.isfile(item_path) and item_name.endswith(".py") and not item_name.startswith("__"):
+                self._load_single_plugin(plugins_dir, item_name)
+            # Carrega pacotes (pastas com __init__.py)
+            elif os.path.isdir(item_path) and os.path.exists(os.path.join(item_path, "__init__.py")):
+                self._load_package_plugin(plugins_dir, item_name)
 
     def _load_single_plugin(self, directory: str, filename: str) -> None:
         """Carrega um único arquivo de plugin.
@@ -126,12 +137,26 @@ class ExtensionBridge(QObject):
             logger.error(f"Falha ao carregar plugin {plugin_name}: {e}")
             self.plugin_error.emit(plugin_name, str(e))
 
-    def activate_plugins(self, insert_fn, get_text_fn, add_menu_fn, log_fn) -> None:
+    def _load_package_plugin(self, directory: str, package_name: str) -> None:
+        """Carrega um plugin que é um pacote Python."""
+        try:
+            # Como o diretório pai já está no sys.path, podemos importar diretamente
+            module = importlib.import_module(package_name)
+            
+            if hasattr(module, "plugin_main"):
+                self._loaded_modules[package_name] = module
+                logger.info(f"Plugin (pacote) carregado: {package_name}")
+            else:
+                logger.warning(f"Plugin {package_name} ignorado: 'plugin_main' ausente.")
+        except Exception as e:
+            logger.error(f"Erro ao carregar pacote {package_name}: {e}")
+            self.plugin_error.emit(package_name, str(e))
+
+    def activate_plugins(self, insert_fn, get_text_fn, add_menu_fn, log_fn, get_editor_fn=None) -> None:
         """Fase 2: Ativa todos os plugins carregados, injetando a API."""
         for name, module in self._loaded_modules.items():
             try:
-                # Cria uma instância da API para este plugin
-                api = EditorAPI(insert_fn, get_text_fn, add_menu_fn, log_fn)
+                api = EditorAPI(insert_fn, get_text_fn, add_menu_fn, log_fn, get_editor_fn)
                 module.plugin_main(api)
                 self._plugins[name] = module
                 self.plugin_loaded.emit(name)
