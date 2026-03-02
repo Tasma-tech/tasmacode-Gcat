@@ -226,19 +226,91 @@ class AutocompleteManager:
         
         if not func_name:
             return None
-            
+        
+        # Calcular índice do parâmetro ativo
+        open_paren_index = i
+        args_text = text_block[open_paren_index+1 : cursor_offset]
+        
+        comma_count = 0
+        nest_level = 0
+        quote_char = None
+        
+        for char in args_text:
+            if quote_char:
+                if char == quote_char and (len(args_text) > 1 and args_text[args_text.index(char)-1] != '\\'): 
+                    quote_char = None
+            elif char in "\"'":
+                quote_char = char
+            elif char in "([{":
+                nest_level += 1
+            elif char in ")]}":
+                if nest_level > 0: nest_level -= 1
+            elif char == ',' and nest_level == 0:
+                comma_count += 1
+        
+        active_index = comma_count
+        
         # 2. Buscar assinatura da função
         lang = self._get_language(file_path)
-        signature = self._find_signature(func_name, buffer, lang)
+        
+        # Verifica se é um método de classe (ex: variavel.metodo)
+        class_type = self._detect_class_type(text_block, open_paren_index, func_name, buffer)
+        signature = self._find_signature(func_name, buffer, lang, class_type)
         
         if signature:
             return {
                 "name": func_name,
-                "params": signature
+                "params": signature,
+                "active_index": active_index
             }
         return None
 
-    def _find_signature(self, func_name, buffer, lang):
+    def _detect_class_type(self, text_block, open_paren_index, func_name, buffer):
+        """Tenta inferir o tipo da variável antes do método."""
+        # Procura por '.' antes do nome da função
+        # O func_name foi extraído terminando em open_paren_index - 1 (aproximadamente)
+        # Precisamos achar onde func_name começa no text_block
+        
+        # Busca reversa simples a partir do parêntese
+        idx = open_paren_index - 1
+        while idx >= 0 and text_block[idx].isspace():
+            idx -= 1
+        
+        # Pula o nome da função
+        idx -= len(func_name)
+        
+        if idx >= 0 and text_block[idx] == '.':
+            # Temos um ponto! Extrair a variável anterior
+            idx -= 1
+            while idx >= 0 and text_block[idx].isspace():
+                idx -= 1
+            
+            end_var = idx + 1
+            while idx >= 0 and (text_block[idx].isalnum() or text_block[idx] == '_'):
+                idx -= 1
+            
+            var_name = text_block[idx+1 : end_var]
+            
+            if var_name:
+                # Tenta achar a definição da variável no buffer (ex: var = Classe())
+                # Simplificação: busca nas últimas 100 linhas
+                all_text = buffer.get_text() # Idealmente limitar range
+                # Regex simples para atribuição: var = Classe(
+                pattern = r'\b' + re.escape(var_name) + r'\s*=\s*([a-zA-Z_]\w*)\s*\('
+                matches = list(re.finditer(pattern, all_text))
+                if matches:
+                    # Pega a última atribuição encontrada antes do cursor seria o ideal, 
+                    # mas pegar a última do arquivo é um bom chute
+                    return matches[-1].group(1)
+                
+                # Inferência para tipos built-in comuns baseados em literais (muito básico)
+                if var_name.startswith('"') or var_name.startswith("'"): return 'str'
+                if var_name.startswith('['): return 'list'
+                if var_name.startswith('{'): return 'dict'
+                
+        return None
+
+    def _find_signature(self, func_name, buffer, lang, class_type=None):
         # 1. Hardcoded signatures (exemplo)
         signatures = {
             'python': {
@@ -250,7 +322,13 @@ class AutocompleteManager:
                 'int': 'x, base=10',
                 'str': 'object=""',
                 'list': 'iterable=()',
-                'dict': 'mapping=(), **kwargs'
+                'dict': 'mapping=(), **kwargs',
+                # Métodos de Classes Comuns
+                'str.split': 'sep=None, maxsplit=-1',
+                'str.replace': 'old, new, count=-1',
+                'list.append': 'object',
+                'list.pop': 'index=-1',
+                'dict.get': 'key, default=None'
             },
             'javascript': {
                 'console.log': 'message, ...',
@@ -260,6 +338,12 @@ class AutocompleteManager:
             }
         }
         
+        # Tenta buscar como Metodo de Classe (ex: str.split)
+        if class_type:
+            key = f"{class_type}.{func_name}"
+            if lang in signatures and key in signatures[lang]:
+                return signatures[lang][key]
+
         if lang in signatures and func_name in signatures[lang]:
             return signatures[lang][func_name]
             

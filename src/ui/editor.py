@@ -243,7 +243,7 @@ class CodeEditor(QAbstractScrollArea):
             if self.autocomplete_widget and self.autocomplete_widget.isVisible():
                 point.setY(point.y() - self.autocomplete_widget.height() - 5)
             
-            self.parameter_hint_widget.show_hint(hint['name'], hint['params'], point)
+            self.parameter_hint_widget.show_hint(hint['name'], hint['params'], point, hint.get('active_index', 0))
         else:
             if hasattr(self, 'parameter_hint_widget'):
                 self.parameter_hint_widget.hide()

@@ -50,8 +50,36 @@ class ParameterHintWidget(QLabel):
         """)
         self.hide()
 
-    def show_hint(self, func_name, params, pos):
-        content = f"<span style='color: #4fc1ff; font-weight: bold;'>{func_name}</span>({params})"
+    def show_hint(self, func_name, params, pos, active_index=0):
+        # Processa os parâmetros para destacar o ativo
+        param_parts = []
+        current_part = ""
+        nest_level = 0
+        quote_char = None
+        
+        # Parser simples para dividir parâmetros respeitando aninhamento
+        for char in params:
+            if char == ',' and nest_level == 0 and not quote_char:
+                param_parts.append(current_part)
+                current_part = ""
+            else:
+                current_part += char
+                if char in "\"'":
+                    if quote_char == char: quote_char = None
+                    elif not quote_char: quote_char = char
+                elif char in "([{": nest_level += 1
+                elif char in ")]}": nest_level = max(0, nest_level - 1)
+        param_parts.append(current_part)
+        
+        formatted_params = []
+        for i, part in enumerate(param_parts):
+            if i == active_index:
+                formatted_params.append(f"<span style='font-weight: bold; color: #ffffff; text-decoration: underline;'>{part}</span>")
+            else:
+                formatted_params.append(part)
+        
+        params_html = ", ".join(formatted_params)
+        content = f"<span style='color: #4fc1ff; font-weight: bold;'>{func_name}</span>({params_html})"
         self.setText(content)
         self.adjustSize()
         self.move(pos)
