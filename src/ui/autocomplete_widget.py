@@ -1,6 +1,39 @@
 from PySide6.QtWidgets import QListWidget, QListWidgetItem, QStyle, QWidget, QHBoxLayout, QLabel
-from PySide6.QtCore import Qt, Signal, QSize
+from PySide6.QtCore import Qt, Signal, QSize, QPoint
 from PySide6.QtGui import QIcon, QColor
+
+class DocumentationTooltip(QLabel):
+    """Tooltip flutuante para documentação de autocomplete."""
+    def __init__(self, parent=None):
+        super().__init__(parent, Qt.WindowType.ToolTip | Qt.WindowType.FramelessWindowHint)
+        self.setStyleSheet("""
+            background-color: #252526;
+            color: #cccccc;
+            border: 1px solid #454545;
+            padding: 8px;
+            font-family: 'Segoe UI', sans-serif;
+        """)
+        self.setWordWrap(True)
+        self.setMaximumWidth(350)
+        self.hide()
+
+    def show_doc(self, suggestion, pos):
+        label = suggestion.get('label', '')
+        kind = suggestion.get('kind', '').capitalize()
+        detail = suggestion.get('detail', '')
+        doc = suggestion.get('documentation', '<i>Sem documentação disponível.</i>').replace('\n', '<br>')
+        
+        content = f"""
+        <div style='font-size: 13px; font-weight: bold; color: #4fc1ff;'>{label}</div>
+        <div style='font-size: 11px; color: #808080; margin-bottom: 6px;'>{kind} {f"- {detail}" if detail else ""}</div>
+        <hr style='background-color: #454545; height: 1px; border: none; margin: 4px 0;'>
+        <div style='font-size: 12px; margin-top: 4px; color: #d4d4d4;'>{doc}</div>
+        """
+        self.setText(content)
+        self.adjustSize()
+        self.move(pos)
+        self.show()
+        self.raise_()
 
 class SuggestionItemWidget(QWidget):
     """Widget customizado para um item da lista de autocomplete, com layout rico."""
@@ -8,8 +41,8 @@ class SuggestionItemWidget(QWidget):
         super().__init__(parent)
         
         layout = QHBoxLayout(self)
-        layout.setContentsMargins(8, 5, 8, 5) # Aumenta o padding para deixar o item mais alto
-        layout.setSpacing(10)
+        layout.setContentsMargins(10, 6, 10, 6) # Mais espaçamento e altura
+        layout.setSpacing(12)
 
         # Ícone
         icon_label = QLabel()
@@ -18,11 +51,11 @@ class SuggestionItemWidget(QWidget):
         
         # Texto da Sugestão
         text_label = QLabel(suggestion['label'])
-        text_label.setStyleSheet("color: #cccccc; background: transparent;")
+        text_label.setStyleSheet("color: #e0e0e0; font-weight: bold; font-size: 13px; background: transparent;")
 
         # Detalhe (tipo da sugestão, alinhado à direita)
         detail_label = QLabel(suggestion.get('detail', ''))
-        detail_label.setStyleSheet("color: #888888; background: transparent;")
+        detail_label.setStyleSheet("color: #858585; font-size: 11px; font-style: italic; background: transparent;")
         
         layout.addWidget(icon_label)
         layout.addWidget(text_label)
@@ -45,6 +78,8 @@ class AutocompleteWidget(QListWidget):
         self.setFocusPolicy(Qt.NoFocus)
         self.setAttribute(Qt.WA_ShowWithoutActivating)
         self.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.setMouseTracking(True) # Habilita rastreamento para tooltip
+        self.tooltip_widget = DocumentationTooltip(self)
         
         self.itemActivated.connect(self._on_item_activated)
         
@@ -53,11 +88,15 @@ class AutocompleteWidget(QListWidget):
                 background-color: #252526;
                 color: #cccccc;
                 border: 1px solid #454545;
-                border-radius: 4px;
+                border-radius: 6px;
                 outline: none;
+            }
+            QListWidget::item {
+                border-bottom: 1px solid #2d2d30;
             }
             QListWidget::item:selected {
                 background-color: #04395e;
+                border-left: 3px solid #007acc;
             }
             /* Scrollbar styling */
             QScrollBar:vertical {
@@ -129,6 +168,21 @@ class AutocompleteWidget(QListWidget):
         if suggestion_data:
             self.suggestion_selected.emit(suggestion_data)
         self.hide()
+
+    def mouseMoveEvent(self, event):
+        """Mostra tooltip ao passar o mouse."""
+        item = self.itemAt(event.pos())
+        if item:
+            data = item.data(Qt.UserRole)
+            global_pos = self.mapToGlobal(event.pos()) + QPoint(20, 10)
+            self.tooltip_widget.show_doc(data, global_pos)
+        else:
+            self.tooltip_widget.hide()
+        super().mouseMoveEvent(event)
+        
+    def leaveEvent(self, event):
+        self.tooltip_widget.hide()
+        super().leaveEvent(event)
 
     def keyPressEvent(self, event):
         """Processa teclas para navegação e seleção."""

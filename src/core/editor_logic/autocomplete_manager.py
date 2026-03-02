@@ -16,10 +16,26 @@ class AutocompleteManager:
                     "True", "False", "None", "self", "super"
                 ],
                 'snippets': {
-                    'def': {'label': 'def', 'kind': 'snippet', 'detail': 'Function', 'insert_text': 'def name(args):\n    pass'},
-                    'class': {'label': 'class', 'kind': 'snippet', 'detail': 'Class', 'insert_text': 'class Name:\n    def __init__(self):\n        pass'},
-                    'if': {'label': 'if', 'kind': 'snippet', 'detail': 'If block', 'insert_text': 'if condition:\n    pass'},
-                    'for': {'label': 'for', 'kind': 'snippet', 'detail': 'For loop', 'insert_text': 'for item in iterable:\n    pass'}
+                    'def': {
+                        'label': 'def', 'kind': 'snippet', 'detail': 'Function Definition', 
+                        'insert_text': 'def name(args):\n    pass',
+                        'documentation': 'Define uma nova função.\n\nSintaxe:\ndef nome_da_funcao(parametros):\n    corpo'
+                    },
+                    'class': {
+                        'label': 'class', 'kind': 'snippet', 'detail': 'Class Definition', 
+                        'insert_text': 'class Name:\n    def __init__(self):\n        pass',
+                        'documentation': 'Define uma nova classe.\n\nInclui o método construtor __init__.'
+                    },
+                    'if': {
+                        'label': 'if', 'kind': 'snippet', 'detail': 'If Statement', 
+                        'insert_text': 'if condition:\n    pass',
+                        'documentation': 'Estrutura condicional.\nExecuta o bloco se a condição for verdadeira.'
+                    },
+                    'for': {
+                        'label': 'for', 'kind': 'snippet', 'detail': 'For Loop', 
+                        'insert_text': 'for item in iterable:\n    pass',
+                        'documentation': 'Loop for para iterar sobre uma sequência.'
+                    }
                 }
             },
             'html': {
@@ -29,9 +45,21 @@ class AutocompleteManager:
                     "form", "input", "button", "br", "meta", "link", "title"
                 ],
                 'snippets': {
-                    'html5': {'label': 'html5', 'kind': 'snippet', 'detail': 'HTML5 Template', 'insert_text': '<!DOCTYPE html>\n<html lang="en">\n<head>\n    <meta charset="UTF-8">\n    <title>Document</title>\n</head>\n<body>\n    \n</body>\n</html>'},
-                    'div': {'label': 'div', 'kind': 'snippet', 'detail': 'Div tag', 'insert_text': '<div>\n    \n</div>'},
-                    'a': {'label': 'a', 'kind': 'snippet', 'detail': 'Link', 'insert_text': '<a href=""></a>'}
+                    'html5': {
+                        'label': 'html5', 'kind': 'snippet', 'detail': 'HTML5 Template', 
+                        'insert_text': '<!DOCTYPE html>\n<html lang="en">\n<head>\n    <meta charset="UTF-8">\n    <title>Document</title>\n</head>\n<body>\n    \n</body>\n</html>',
+                        'documentation': 'Estrutura básica de um documento HTML5.'
+                    },
+                    'div': {
+                        'label': 'div', 'kind': 'snippet', 'detail': 'Div Element', 
+                        'insert_text': '<div>\n    \n</div>',
+                        'documentation': 'Define uma divisão ou seção em um documento HTML.'
+                    },
+                    'a': {
+                        'label': 'a', 'kind': 'snippet', 'detail': 'Hyperlink', 
+                        'insert_text': '<a href=""></a>',
+                        'documentation': 'Define um hiperlink.'
+                    }
                 }
             },
             'css': {

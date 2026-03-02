@@ -226,8 +226,18 @@ class CodeEditor(QAbstractScrollArea):
         self.buffer.delete_selection()
         
         # Insere o snippet ou o texto da sugestão
-        text_to_insert = suggestion.get('insert_text', suggestion.get('label', ''))
+        kind = suggestion.get('kind')
+        label = suggestion.get('label', '')
+        insert_text = suggestion.get('insert_text')
         
+        text_to_insert = insert_text if insert_text else label
+        
+        # Lógica para funções: adicionar () e mover cursor para dentro
+        move_back = 0
+        if kind == 'function' and not insert_text:
+            text_to_insert += "()"
+            move_back = 1
+
         # Lógica de indentação para snippets com múltiplas linhas
         if '\n' in text_to_insert:
             current_indent_spaces = len(line_text) - len(line_text.lstrip(' '))
@@ -237,6 +247,9 @@ class CodeEditor(QAbstractScrollArea):
             text_to_insert = '\n'.join(indented_lines)
             
         self.buffer.insert_text(text_to_insert)
+        
+        if move_back > 0:
+            self.buffer.move_cursors(0, -move_back)
 
     # --- Lógica do Gutter de Linhas ---
     def line_number_area_width(self):
