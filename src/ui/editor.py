@@ -322,6 +322,10 @@ class CodeEditor(QAbstractScrollArea):
         self.auto_indent = settings.get("auto_indent", True)
         self.autocomplete_enabled = settings.get("enable_autocomplete", False)
         
+        # Atualiza configurações do plugin Smear Cursor se estiver ativo
+        if hasattr(self, 'smear_widget'):
+            self.smear_widget.update_config(settings)
+        
         # Recalcula layout
         self._update_line_number_area_width()
         self.viewport().update()

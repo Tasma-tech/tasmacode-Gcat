@@ -9,6 +9,8 @@ def plugin_main(api):
     """Ponto de entrada do plugin."""
     api.log("Smear Cursor Plugin inicializado!")
     api.add_menu_action("Ativar/Desativar Smear Cursor", toggle_smear)
+    api.add_menu_action("Modo: Sólido", lambda api: set_mode(api, 'solid'))
+    api.add_menu_action("Modo: Partículas", lambda api: set_mode(api, 'particles'))
     
     # Tenta anexar ao editor ativo se houver um
     editor = api.get_active_editor()
@@ -31,3 +33,8 @@ def toggle_smear(api):
         widget.set_enabled(not widget.enabled)
         status = "Ativado" if widget.enabled else "Desativado"
         api.log(f"Smear Cursor {status}")
+
+def set_mode(api, mode):
+    """Altera o modo de renderização."""
+    api.update_config("smear_mode", mode)
+    api.log(f"Smear Cursor: Modo {mode} definido e salvo.")

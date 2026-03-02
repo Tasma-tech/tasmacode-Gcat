@@ -39,6 +39,13 @@ class SmearCursorWidget(QWidget):
         self.setVisible(state)
         if not state:
             self.animating = False
+            
+    def update_config(self, settings: dict):
+        """Atualiza configurações dinamicamente."""
+        stiffness = settings.get("smear_stiffness", 0.6)
+        mode = settings.get("smear_mode", "solid")
+        self.physics.set_base_stiffness(stiffness)
+        self.renderer.set_mode(mode)
 
     def move_cursor_to(self, rect: QRect):
         """Inicia animação para nova posição"""

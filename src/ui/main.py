@@ -1113,12 +1113,18 @@ class JCodeMainWindow(QMainWindow):
         self.extension_bridge.load_plugins(plugins_path)
         
         # Fase 2: Activate (Execução com API)
+        def update_config_wrapper(key, value):
+            # Atualiza a configuração e salva no disco
+            self.config_manager.config[key] = value
+            self.config_manager.save_config(self.config_manager.config)
+
         self.extension_bridge.activate_plugins(
             insert_fn=self._api_insert_text,
             get_text_fn=self._api_get_text,
             add_menu_fn=self._api_add_menu,
             log_fn=self._api_log,
-            get_editor_fn=lambda: self.active_editor
+            get_editor_fn=lambda: self.active_editor,
+            update_config_fn=update_config_wrapper
         )
 
     # --- Implementação da EditorAPI ---

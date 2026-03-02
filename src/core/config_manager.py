@@ -26,7 +26,9 @@ class ConfigManager(QObject):
             "live_server_port": 0,
             "live_server_open_browser": True,
             "enable_autocomplete": False,
-            "autocomplete_delay": 300
+            "autocomplete_delay": 300,
+            "smear_stiffness": 0.6,
+            "smear_mode": "solid"
         }
         self.config = self.load_config()
 

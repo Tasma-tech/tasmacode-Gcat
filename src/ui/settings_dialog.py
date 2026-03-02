@@ -67,6 +67,12 @@ class SettingsDialog(QDialog):
         slider_delay.setRange(0, 2000)
         slider_delay.setValue(self.current_config.get('autocomplete_delay', 300))
         slider_delay.valueChanged.connect(lambda v: (lbl_delay.setText(f"Atraso do Autocomplete (ms): {v}"), self._update_local('autocomplete_delay', v)))
+
+        lbl_stiffness = QLabel(f"Intensidade do Smear Cursor: {self.current_config.get('smear_stiffness', 0.6):.2f}")
+        slider_stiffness = QSlider(Qt.Orientation.Horizontal)
+        slider_stiffness.setRange(1, 100) # 0.01 a 1.0
+        slider_stiffness.setValue(int(self.current_config.get('smear_stiffness', 0.6) * 100))
+        slider_stiffness.valueChanged.connect(lambda v: (lbl_stiffness.setText(f"Intensidade do Smear Cursor: {v/100:.2f}"), self._update_local('smear_stiffness', v/100)))
         
         lbl_beta = QLabel("Nota: Funcionalidade em testes beta. Pode apresentar instabilidade.")
         lbl_beta.setStyleSheet("color: #808080; font-style: italic; font-size: 11px; margin-left: 20px;")
@@ -78,6 +84,8 @@ class SettingsDialog(QDialog):
         editor_layout.addWidget(chk_autocomplete)
         editor_layout.addWidget(lbl_delay)
         editor_layout.addWidget(slider_delay)
+        editor_layout.addWidget(lbl_stiffness)
+        editor_layout.addWidget(slider_stiffness)
         editor_layout.addWidget(lbl_beta)
         editor_layout.addStretch()
 

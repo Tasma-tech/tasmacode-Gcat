@@ -11,6 +11,10 @@ class SpringPhysics:
         self.current_corners: List[List[float]] = [[0, 0], [0, 0], [0, 0], [0, 0]]
         self.target_corners: List[List[float]] = [[0, 0], [0, 0], [0, 0], [0, 0]]
         self.stiffnesses: List[float] = [0.6, 0.4, 0.3, 0.2]
+        self.base_stiffness = 0.6
+        
+    def set_base_stiffness(self, value: float):
+        self.base_stiffness = max(0.01, min(1.0, value))
         
     def update_physics(self):
         """Atualiza posições usando física de molas - baseado no original"""
@@ -53,11 +57,11 @@ class SpringPhysics:
         max_dist = max(distances) if distances else 1
         
         if max_dist == min_dist:
-            self.stiffnesses = [0.6] * 4
+            self.stiffnesses = [self.base_stiffness] * 4
             return
             
         for i in range(4):
             if max_dist > min_dist:
                 x = (distances[i] - min_dist) / (max_dist - min_dist)
-                stiffness = 0.6 + (0.4 - 0.6) * x ** 2.0
+                stiffness = self.base_stiffness + (0.4 - self.base_stiffness) * x ** 2.0
                 self.stiffnesses[i] = min(1, stiffness)
