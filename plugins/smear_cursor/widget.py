@@ -67,6 +67,9 @@ class SmearCursorWidget(QWidget):
 
     def _on_text_changed(self):
         """Detecta digitação para emitir faíscas."""
+        # Atualiza a posição do cursor para o efeito smear (importante para Enter/Backspace)
+        self._on_cursor_moved()
+
         now = time.time()
         # Se digitar rápido (< 300ms entre teclas) e faíscas ativadas
         if self.config.sparks_enabled and (now - self.last_type_time < 0.3):
