@@ -1,18 +1,24 @@
 {
-    "background": "#141317",
+    "background": "#0a0c0e",
     "foreground": "#e8e6eb",
     "selection": "#2a2730",
     "sidebar_bg": "#18161c",
     "statusbar_bg": "#18161c",
     "accent": "#a277ff",
-
     "line_highlight": "#1f1c24",
     "indent_guide": "#2c2833",
     "bracket_match": "#a277ff55",
     "minimap_overlay": "#a277ff18",
-
     "gutter_bg": "#121015",
     "gutter_fg": "#9a94a6",
-
-    "border_color": "#000000"
+    "keyword_color": "#ff79c6",
+    "builtin_color": "#8be9fd",
+    "string_color": "#f1fa8c",
+    "comment_color": "#6272a4",
+    "class_color": "#50fa7b",
+    "function_color": "#50fa7b",
+    "operator_color": "#ff79c6",
+    "border_color": "#000000",
+    "false": "#0a0b0c",
+    "false": "#0b0d0d"
 }

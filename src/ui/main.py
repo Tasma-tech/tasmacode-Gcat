@@ -645,7 +645,7 @@ class JCodeMainWindow(QMainWindow):
 
     def _show_store_dialog(self):
         """Abre a janela da loja de plugins."""
-        dialog = StoreWindow(root_dir, self)
+        dialog = StoreWindow(root_dir, self.theme_manager, self)
         dialog.exec()
 
     def _show_about_dialog(self):

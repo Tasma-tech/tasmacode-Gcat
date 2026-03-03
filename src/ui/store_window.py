@@ -2,17 +2,25 @@ import os
 from PySide6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLineEdit, QPushButton,
                                QLabel, QMessageBox, QApplication, QListWidget, QFrame, QListWidgetItem, QWidget, QStyle)
 from PySide6.QtCore import Qt, QSize, Signal, QPoint
-from PySide6.QtGui import QIcon, QCursor
+from PySide6.QtGui import QIcon, QCursor, QColor
 from src.core.ui_logic.store_manager import StoreManager
 
 class PluginItemWidget(QWidget):
     """Widget customizado para exibir um item de plugin na grade com um botão de remover ao passar o mouse."""
     remove_requested = Signal(str)
 
-    def __init__(self, plugin_name: str, icon: QIcon, parent=None):
+    def __init__(self, plugin_name: str, icon: QIcon, theme: dict, parent=None):
         super().__init__(parent)
         self.plugin_name = plugin_name
-        self.setStyleSheet("background-color: #3c3c3c; border-radius: 8px;")
+        
+        # Cores baseadas no tema
+        bg = theme.get("sidebar_bg", "#3c3c3c")
+        fg = theme.get("foreground", "#cccccc")
+        
+        # Ajuste de contraste para o card (mais claro se tema escuro, mais escuro se tema claro)
+        bg_color = QColor(bg).lighter(110) if QColor(bg).lightness() < 128 else QColor(bg).darker(105)
+        
+        self.setStyleSheet(f"background-color: {bg_color.name()}; border-radius: 8px;")
 
         # Layout principal
         layout = QVBoxLayout(self)
@@ -28,7 +36,7 @@ class PluginItemWidget(QWidget):
         self.name_label = QLabel(plugin_name)
         self.name_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.name_label.setWordWrap(True)
-        self.name_label.setStyleSheet("color: #cccccc; background: transparent;")
+        self.name_label.setStyleSheet(f"color: {fg}; background: transparent;")
 
         layout.addWidget(self.icon_label)
         layout.addStretch()
@@ -66,11 +74,17 @@ class StoreWindow(QDialog):
     """
     Janela para a loja de plugins.
     """
-    def __init__(self, root_dir: str, parent=None):
+    def __init__(self, root_dir: str, theme_manager, parent=None):
         super().__init__(parent)
+        self.theme_manager = theme_manager
+        self.theme = self.theme_manager.current_theme
+        
         self.setWindowTitle("Loja de Plugins")
         self.resize(650, 500)
-        self.setStyleSheet("background-color: #252526; color: #cccccc;")
+        
+        bg = self.theme.get("background", "#252526")
+        fg = self.theme.get("foreground", "#cccccc")
+        self.setStyleSheet(f"background-color: {bg}; color: {fg};")
 
         self.root_dir = root_dir
         self.store_manager = StoreManager(self.root_dir)
@@ -84,19 +98,24 @@ class StoreWindow(QDialog):
         layout.addWidget(title_label)
 
         input_layout = QHBoxLayout()
+        
+        input_bg = self.theme.get("sidebar_bg", "#3c3c3c")
+        border = self.theme.get("border_color", "#454545")
+        accent = self.theme.get("accent", "#007acc")
+        
         self.link_plugin = QLineEdit()
         self.link_plugin.setObjectName("link_plugin")
         self.link_plugin.setPlaceholderText("Cole a URL do repositório do plugin aqui...")
-        self.link_plugin.setStyleSheet("""
-            QLineEdit {
-                background-color: #3c3c3c; border: 1px solid #454545;
-                padding: 8px; color: white; border-radius: 4px;
-            }
+        self.link_plugin.setStyleSheet(f"""
+            QLineEdit {{
+                background-color: {input_bg}; border: 1px solid {border};
+                padding: 8px; color: {fg}; border-radius: 4px;
+            }}
         """)
         
         self.install_button = QPushButton("Instalar")
         self.install_button.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.install_button.setStyleSheet("QPushButton { background-color: #007acc; color: white; padding: 8px 16px; border-radius: 4px; border: none; } QPushButton:hover { background-color: #008ae6; }")
+        self.install_button.setStyleSheet(f"QPushButton {{ background-color: {accent}; color: white; padding: 8px 16px; border-radius: 4px; border: none; font-weight: bold; }} QPushButton:hover {{ background-color: {QColor(accent).lighter(110).name()}; }}")
         self.install_button.clicked.connect(self._on_install_clicked)
 
         input_layout.addWidget(self.link_plugin)
@@ -180,7 +199,7 @@ class StoreWindow(QDialog):
             self.plugins_list.setViewMode(QListWidget.ViewMode.IconMode)
             for plugin_name in plugins:
                 # Cria o widget customizado para o item
-                plugin_widget = PluginItemWidget(plugin_name, plugin_icon)
+                plugin_widget = PluginItemWidget(plugin_name, plugin_icon, self.theme)
                 plugin_widget.remove_requested.connect(self._on_remove_requested)
 
                 # Cria um QListWidgetItem para conter o widget customizado
