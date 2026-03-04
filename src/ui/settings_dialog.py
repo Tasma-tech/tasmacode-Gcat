@@ -1,5 +1,5 @@
 from PySide6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QTabWidget, QWidget, 
-                               QLabel, QSlider, QCheckBox, QComboBox, QPushButton, QDialogButtonBox, QLineEdit, QSpinBox, QColorDialog, QFileDialog, QMessageBox, QCompleter)
+                               QLabel, QSlider, QCheckBox, QComboBox, QPushButton, QDialogButtonBox, QLineEdit, QSpinBox, QColorDialog, QFileDialog, QMessageBox, QCompleter, QRadioButton)
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor, QFont
 
@@ -107,6 +107,28 @@ class SettingsDialog(QDialog):
         chk_autocomplete.setChecked(self.current_config.get('enable_autocomplete', False))
         chk_autocomplete.toggled.connect(lambda v: (self._update_local('enable_autocomplete', v), self._apply_live()))
 
+        # Nova seção: Quebra de Linha
+        lbl_wrap_title = QLabel("Opções de Linha Longa:")
+        lbl_wrap_title.setStyleSheet("font-weight: bold; margin-top: 10px;")
+
+        radio_horizontal = QRadioButton("Scroll Horizontal")
+        radio_wrap = QRadioButton("Quebra de Linha Visual")
+
+        wrap_mode = self.current_config.get("wrap_mode", "horizontal")
+        if wrap_mode == "horizontal":
+            radio_horizontal.setChecked(True)
+        else:
+            radio_wrap.setChecked(True)
+
+        # Conecta as mudanças
+        radio_horizontal.toggled.connect(lambda checked: (
+            self._update_local("wrap_mode", "horizontal"), self._apply_live()
+        ) if checked else None)
+
+        radio_wrap.toggled.connect(lambda checked: (
+            self._update_local("wrap_mode", "wrap"), self._apply_live()
+        ) if checked else None)
+
         lbl_delay = QLabel(f"Atraso do Autocomplete (ms): {self.current_config.get('autocomplete_delay', 300)}")
         slider_delay = QSlider(Qt.Orientation.Horizontal)
         slider_delay.setRange(0, 2000)
@@ -172,6 +194,9 @@ class SettingsDialog(QDialog):
         editor_layout.addWidget(chk_lines)
         editor_layout.addWidget(chk_indent)
         editor_layout.addWidget(chk_autocomplete)
+        editor_layout.addWidget(lbl_wrap_title)
+        editor_layout.addWidget(radio_horizontal)
+        editor_layout.addWidget(radio_wrap)
         editor_layout.addWidget(lbl_delay)
         editor_layout.addWidget(slider_delay)
         editor_layout.addWidget(lbl_smear_title)
