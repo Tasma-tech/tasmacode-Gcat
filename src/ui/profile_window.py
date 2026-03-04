@@ -6,6 +6,7 @@ from src.core.git_logic import GitLogic
 import requests
 import webbrowser
 
+
 class RepoLoaderThread(QThread):
     loaded = Signal(list)
     def __init__(self, auth_logic):

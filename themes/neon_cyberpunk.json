@@ -1,0 +1,22 @@
+{
+    "background": "#000000",
+    "foreground": "#e0e0e0",
+    "sidebar_bg": "#000000",
+    "statusbar_bg": "#000000",
+    "border_color": "#2a004f",
+    "accent": "#00ffff",
+    "selection": "#4f008f",
+    "line_highlight": "#100018",
+    "indent_guide": "#444444",
+    "bracket_match": "#ff00ff",
+    "gutter_bg": "#000000",
+    "gutter_fg": "#666666",
+    "minimap_bg": "#000000",
+    "minimap_overlay": "#333333",
+    "keyword_color": "#9f00ff",
+    "string_color": "#00ffff",
+    "comment_color": "#808080",
+    "function_color": "#ff00ff",
+    "class_color": "#00ffff",
+    "number_color": "#ff00ff"
+}
