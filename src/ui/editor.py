@@ -71,6 +71,9 @@ class CodeEditor(QAbstractScrollArea):
         
         # Gutter de Linhas
         self.line_number_area = LineNumberArea(self)
+        # Conecta os sinais de scroll para atualizar a área de números de linha
+        self.verticalScrollBar().valueChanged.connect(self.line_number_area.update)
+        self.horizontalScrollBar().valueChanged.connect(self.line_number_area.update)
         self._update_line_number_area_width()
         
     def set_buffer(self, buffer):
@@ -511,6 +514,11 @@ class CodeEditor(QAbstractScrollArea):
                     painter.setPen(QColor(self.theme.get_color("gutter_fg")))
                     painter.setFont(self.font)
                     painter.drawText(0, int(y), self.line_number_area.width() - 5, self.line_height, Qt.AlignmentFlag.AlignRight, str(logical_line_idx + 1))
+                else:
+                    y = (visual_line_idx * self.line_height) - scroll_y
+                    painter.setPen(QColor(self.theme.get_color("gutter_fg")))
+                    painter.setFont(self.font)
+                    painter.drawText(0, int(y), self.line_number_area.width() - 5, self.line_height, Qt.AlignmentFlag.AlignRight, "⤶")
         else:
             first_line = scroll_y // self.line_height if self.line_height > 0 else 0
             lines_visible = (viewport_h // self.line_height if self.line_height > 0 else 0) + 2
