@@ -1,6 +1,6 @@
 import sys
 import os
-from PySide6.QtWidgets import QApplication, QMainWindow, QWidget, QVBoxLayout, QSplitter, QFileDialog, QInputDialog, QMessageBox, QMenu
+from PySide6.QtWidgets import QApplication, QMainWindow, QWidget, QVBoxLayout, QSplitter, QFileDialog, QInputDialog, QMessageBox, QMenu, QMenuBar
 from PySide6.QtGui import QKeySequence
 from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QTextCursor, QAction, QKeySequence, QCursor
@@ -45,6 +45,7 @@ from src.ui.theme_editor_dialog import ThemeEditorDialog
 from src.serv_live.live_server_manager import LiveServerManager
 from src.core.github_auth import GithubAuth
 from src.ui.profile_window import ProfileWindow
+from src.ui.custom_title_bar import CustomTitleBar
 
 class JCodeMainWindow(QMainWindow):
     """Janela principal do editor JCODE.
@@ -81,6 +82,11 @@ class JCodeMainWindow(QMainWindow):
         # --- 3. Configuração da UI ---
         self.setWindowTitle("JCode - Modular Editor")
         self.resize(1024, 768)
+        
+        # Configuração da Barra de Título
+        self.use_custom_title = self.config_manager.get("use_custom_title_bar") or False
+        if self.use_custom_title:
+            self.setWindowFlags(Qt.WindowType.FramelessWindowHint)
         
         self._setup_ui()
         self._create_actions()
@@ -123,6 +129,8 @@ class JCodeMainWindow(QMainWindow):
         
         self.custom_statusbar = StatusBar()
         self.setStatusBar(self.custom_statusbar)
+        if self.use_custom_title:
+            self.custom_statusbar.setSizeGripEnabled(True)
         
         self.command_palette = CommandPalette(self)
         
@@ -149,11 +157,31 @@ class JCodeMainWindow(QMainWindow):
         
         self.right_sidebar.hide() # Começa oculta
         
-        self.setCentralWidget(self.main_splitter)
+        if self.use_custom_title:
+            # Container principal para suportar TitleBar customizada
+            self.main_container = QWidget()
+            self.main_layout = QVBoxLayout(self.main_container)
+            self.main_layout.setContentsMargins(0, 0, 0, 0)
+            self.main_layout.setSpacing(0)
+            
+            self.custom_title_bar = CustomTitleBar(self)
+            self.custom_title_bar.settings_clicked.connect(self._show_settings_dialog)
+            self.custom_title_bar.profile_clicked.connect(self._show_profile_window)
+            self.main_layout.addWidget(self.custom_title_bar)
+            
+            self.menu_bar_instance = QMenuBar()
+            self.main_layout.addWidget(self.menu_bar_instance)
+            
+            self.main_layout.addWidget(self.main_splitter)
+            
+            self.setCentralWidget(self.main_container)
+        else:
+            self.menu_bar_instance = self.menuBar()
+            self.setCentralWidget(self.main_splitter)
 
     def _create_menu_bar(self):
         """Cria e popula a barra de menu global."""
-        menu_bar = self.menuBar()
+        menu_bar = self.menu_bar_instance
 
 
         def _create_new_session():
@@ -608,6 +636,10 @@ class JCodeMainWindow(QMainWindow):
         
         self.custom_statusbar.apply_theme(self.theme_manager.current_theme)
         self.right_sidebar.apply_theme(self.theme_manager.current_theme)
+        
+        if hasattr(self, 'custom_title_bar'):
+            self.custom_title_bar.apply_theme(self.theme_manager.current_theme)
+            
         # 2. Editor (Propaga para todas as abas)
         for i in range(self.editor_group.tab_widget.count()):
             editor = self.editor_group.tab_widget.widget(i)
@@ -628,7 +660,11 @@ class JCodeMainWindow(QMainWindow):
             self.ai_splitter.addWidget(self.ai_chat_widget)
             self.ai_splitter.setStretchFactor(0, 4)
             self.ai_splitter.setStretchFactor(1, 1)
-            self.setCentralWidget(self.ai_splitter)
+            
+            if self.use_custom_title:
+                self.main_layout.addWidget(self.ai_splitter)
+            else:
+                self.setCentralWidget(self.ai_splitter)
 
             # Começa oculto
             self.ai_chat_widget.hide()
@@ -660,7 +696,8 @@ class JCodeMainWindow(QMainWindow):
             get_editor_fn=lambda: self.active_editor,
             update_config_fn=update_config_wrapper,
             get_config_fn=get_config_wrapper,
-            get_project_root_fn=get_project_root_wrapper
+            get_project_root_fn=get_project_root_wrapper,
+            undo_fn=lambda: self.command_registry.execute("edit.undo")
         )
 
     def _toggle_sidebar(self):
@@ -833,6 +870,8 @@ class JCodeMainWindow(QMainWindow):
         self.search_manager.set_root_path(path)
         self.right_sidebar.load_repo(path) # Atualiza a sidebar direita (Git)
         self.setWindowTitle(f"JCode - {os.path.basename(path)}")
+        if hasattr(self, 'custom_title_bar'):
+            self.custom_title_bar.set_title(f"JCode - {os.path.basename(path)}")
         
         self.session_manager.add_to_history(path)
         # Salva sessão com o novo root e lista de arquivos vazia (pois fechamos tudo)
@@ -1072,6 +1111,8 @@ class JCodeMainWindow(QMainWindow):
         if buffer.dirty:
             title += "*"
         self.setWindowTitle(title)
+        if hasattr(self, 'custom_title_bar'):
+            self.custom_title_bar.set_title(title)
         
         # Atualiza Status Bar
         if buffer.cursors:
@@ -1185,7 +1226,8 @@ class JCodeMainWindow(QMainWindow):
             get_editor_fn=lambda: self.active_editor,
             update_config_fn=update_config_wrapper,
             get_config_fn=get_config_wrapper,
-            get_project_root_fn=get_project_root_wrapper
+            get_project_root_fn=get_project_root_wrapper,
+            undo_fn=lambda: self.command_registry.execute("edit.undo")
         )
 
     # --- Implementação da EditorAPI ---

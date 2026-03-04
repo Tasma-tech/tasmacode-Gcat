@@ -196,7 +196,16 @@ class ProjectFilesDialog(QDialog):
         super().__init__(parent)
         self.setWindowTitle("Anexar Arquivos do Projeto")
         self.resize(400, 500)
-        self.setStyleSheet("background-color: #252526; color: #cccccc;")
+        self.setStyleSheet("""
+            QDialog { background-color: #252526; color: #cccccc; }
+            QTreeView { background-color: #1e1e1e; color: #cccccc; border: 1px solid #3e3e42; outline: none; }
+            QTreeView::item { padding: 4px; }
+            QTreeView::item:hover { background-color: #2a2d2e; }
+            QTreeView::item:selected { background-color: #094771; color: white; }
+            QPushButton { background-color: #0e639c; color: white; border: none; padding: 6px 12px; border-radius: 2px; }
+            QPushButton:hover { background-color: #1177bb; }
+            QPushButton[text="Cancel"] { background-color: #3c3c3c; }
+        """)
 
         layout = QVBoxLayout(self)
 
@@ -231,68 +240,96 @@ class ProjectFilesDialog(QDialog):
         files = {self.source_model.filePath(index) for index in source_indexes if index.column() == 0 and not self.source_model.isDir(index)}
         return list(files)
 
-class DiffHighlighter(QSyntaxHighlighter):
-    def __init__(self, document):
-        super().__init__(document)
-        self.added_fmt = QTextCharFormat()
-        self.added_fmt.setForeground(QColor("#a6e22e"))
-        self.added_fmt.setBackground(QColor("#2d422f"))
-
-        self.removed_fmt = QTextCharFormat()
-        self.removed_fmt.setForeground(QColor("#f92672"))
-        self.removed_fmt.setBackground(QColor("#4d2d33"))
-
-        self.header_fmt = QTextCharFormat()
-        self.header_fmt.setForeground(QColor("#808080"))
-
-    def highlightBlock(self, text):
-        if text.startswith('+'):
-            self.setFormat(0, len(text), self.added_fmt)
-        elif text.startswith('-'):
-            self.setFormat(0, len(text), self.removed_fmt)
-        elif text.startswith('@@') or text.startswith('---') or text.startswith('+++'):
-            self.setFormat(0, len(text), self.header_fmt)
-
 class CodeDiffDialog(QDialog):
     def __init__(self, old_code, new_code, parent=None):
         super().__init__(parent)
-        self.setWindowTitle("Confirmar Alteração de Código")
-        self.resize(800, 600)
-        self.setStyleSheet("background-color: #1e1e1e; color: #cccccc;")
-        
-        layout = QVBoxLayout(self)
-        
-        text_edit = QTextEdit()
-        text_edit.setReadOnly(True)
-        text_edit.setFont(QFont("Monospace", 10))
-        text_edit.setStyleSheet("border: none; background-color: #1e1e1e; color: #cccccc;")
-        
-        diff_lines = difflib.unified_diff(
-            old_code.splitlines(),
-            new_code.splitlines(),
-            fromfile='Original',
-            tofile='Sugestão',
-            lineterm='',
-        )
-        
-        diff_text = "\n".join(diff_lines)
-        
-        if not diff_text and new_code:
-            diff_text = "\n".join(f"+{line}" for line in new_code.splitlines())
-        elif not diff_text and old_code and not new_code:
-             diff_text = "\n".join(f"-{line}" for line in old_code.splitlines())
+        self.setWindowTitle("Revisar Alterações")
+        self.resize(1000, 700)
+        self.setStyleSheet("""
+            QDialog { background-color: #1e1e1e; border: 1px solid #333; }
+            QLabel { color: #ccc; font-size: 12px; font-weight: bold; }
+            QTextEdit { background-color: #1e1e1e; color: #d4d4d4; border: none; font-family: 'Consolas', 'Monospace'; font-size: 11px; }
+            QPushButton { background-color: #3c3c3c; color: white; border: none; padding: 8px 16px; border-radius: 4px; font-weight: bold; }
+            QPushButton:hover { background-color: #4c4c4c; }
+            QPushButton#Accept { background-color: #2da44e; }
+            QPushButton#Accept:hover { background-color: #2c974b; }
+            QPushButton#Reject { background-color: #d73a49; }
+            QPushButton#Reject:hover { background-color: #cb2431; }
+        """)
 
-        text_edit.setPlainText(diff_text)
-        
-        self.highlighter = DiffHighlighter(text_edit.document())
-        layout.addWidget(text_edit)
-        
-        btns = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
-        btns.button(QDialogButtonBox.Ok).setText("Aceitar")
-        btns.button(QDialogButtonBox.Cancel).setText("Rejeitar")
-        btns.accepted.connect(self.accept)
-        btns.rejected.connect(self.reject)
-        layout.addWidget(btns)
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+
+        header = QWidget()
+        header_layout = QHBoxLayout(header)
+        header_layout.addWidget(QLabel("Original"))
+        header_layout.addStretch()
+        header_layout.addWidget(QLabel("Sugestão"))
+        header.setStyleSheet("background-color: #252526; border-bottom: 1px solid #333; padding: 5px 10px;")
+        layout.addWidget(header)
+
+        splitter = QSplitter(Qt.Horizontal)
+        self.left_view = QTextEdit()
+        self.left_view.setReadOnly(True)
+        self.left_view.setLineWrapMode(QTextEdit.NoWrap)
+
+        self.right_view = QTextEdit()
+        self.right_view.setReadOnly(True)
+        self.right_view.setLineWrapMode(QTextEdit.NoWrap)
+
+        splitter.addWidget(self.left_view)
+        splitter.addWidget(self.right_view)
+        layout.addWidget(splitter)
+
+        btn_layout = QHBoxLayout()
+        btn_layout.setContentsMargins(15, 15, 15, 15)
+        btn_layout.addStretch()
+
+        btn_reject = QPushButton("Rejeitar")
+        btn_reject.setObjectName("Reject")
+        btn_reject.clicked.connect(self.reject)
+
+        btn_accept = QPushButton("Aceitar")
+        btn_accept.setObjectName("Accept")
+        btn_accept.clicked.connect(self.accept)
+
+        btn_layout.addWidget(btn_reject)
+        btn_layout.addWidget(btn_accept)
+        layout.addLayout(btn_layout)
+
+        self._populate_views(old_code, new_code)
+        self._sync_scrollbars()
+
+    def _populate_views(self, old_code, new_code):
+        old_lines = old_code.splitlines()
+        new_lines = new_code.splitlines()
+        matcher = difflib.SequenceMatcher(None, old_lines, new_lines, autojunk=False)
+
+        fmt_add = QTextCharFormat(); fmt_add.setBackground(QColor("#233923"))
+        fmt_remove = QTextCharFormat(); fmt_remove.setBackground(QColor("#402525"))
+
+        left_cursor, right_cursor = self.left_view.textCursor(), self.right_view.textCursor()
+
+        for tag, i1, i2, j1, j2 in matcher.get_opcodes():
+            old_chunk, new_chunk = old_lines[i1:i2], new_lines[j1:j2]
+            max_len = max(len(old_chunk), len(new_chunk))
+
+            for i in range(max_len):
+                if i < len(old_chunk):
+                    left_cursor.insertText(old_chunk[i] + '\n', fmt_remove if tag != 'insert' else QTextCharFormat())
+                else:
+                    self.left_view.append("")
+
+                if i < len(new_chunk):
+                    right_cursor.insertText(new_chunk[i] + '\n', fmt_add if tag != 'delete' else QTextCharFormat())
+                else:
+                    self.right_view.append("")
+
+    def _sync_scrollbars(self):
+        self.left_scroll = self.left_view.verticalScrollBar()
+        self.right_scroll = self.right_view.verticalScrollBar()
+        self.left_scroll.valueChanged.connect(lambda v: self.right_scroll.setValue(v))
+        self.right_scroll.valueChanged.connect(lambda v: self.left_scroll.setValue(v))
 
 class ChatHistoryManager:
     """Gerencia o armazenamento local dos chats."""
@@ -369,6 +406,11 @@ class AIChatWidget(QWidget):
         self.btn_new_chat.setToolTip("Novo Chat")
         self.btn_new_chat.clicked.connect(self.create_new_chat)
         
+        self.btn_undo = QToolButton()
+        self.btn_undo.setText("↩️")
+        self.btn_undo.setToolTip("Desfazer última ação no editor")
+        self.btn_undo.clicked.connect(self.api.undo)
+        
         self.btn_clear = QToolButton()
         self.btn_clear.setText("🗑")
         self.btn_clear.setToolTip("Limpar Chat Atual")
@@ -382,6 +424,7 @@ class AIChatWidget(QWidget):
         header_layout.addWidget(self.btn_history)
         header_layout.addWidget(title)
         header_layout.addStretch()
+        header_layout.addWidget(self.btn_undo)
         header_layout.addWidget(self.btn_clear)
         header_layout.addWidget(self.btn_new_chat)
         header_layout.addWidget(btn_settings)
@@ -682,11 +725,20 @@ class AIChatWidget(QWidget):
         
         # Instruções de Capacidades
         system_msg += "\n\n[SYSTEM: Capabilities]\n"
-        system_msg += "Para criar/editar arquivos, use:\n"
+        system_msg += "Você é um especialista em edição de código cirúrgica. Ao editar código existente:\n"
+        system_msg += "1. ANALISE o código fornecido no contexto.\n"
+        system_msg += "2. IDENTIFIQUE as linhas exatas (classes, funções, variáveis) que precisam mudar.\n"
+        system_msg += "3. USE o formato SEARCH/REPLACE para alterar APENAS o necessário. NÃO reescreva o arquivo todo a menos que solicitado.\n\n"
+        system_msg += "Formato para Edição Parcial (Search & Replace):\n"
+        system_msg += "<<<<<<< SEARCH\n"
+        system_msg += "    # Copie aqui EXATAMENTE as linhas do código original que serão alteradas\n"
+        system_msg += "    # Inclua indentação correta e contexto suficiente para ser único\n"
+        system_msg += "=======\n"
+        system_msg += "    # Seu novo código aqui\n"
+        system_msg += ">>>>>>> REPLACE\n\n"
+        system_msg += "Formato para Criar Arquivos ou Substituição Total:\n"
         system_msg += "# file: path/to/file.ext\n"
-        system_msg += "conteudo...\n\n"
-        system_msg += "Para editar/apagar trechos específicos (Search & Replace):\n"
-        system_msg += "<<<<<<< SEARCH\ntexto exato a buscar\n=======\nnovo texto (ou vazio para apagar)\n>>>>>>> REPLACE\n"
+        system_msg += "conteudo completo do arquivo...\n"
         
         # Combina prompt com anexos
         full_prompt = message + attachments_content
@@ -908,7 +960,8 @@ class AIChatWidget(QWidget):
                 QMessageBox.warning(self, "Erro", "Nenhum alvo encontrado para aplicar o patch.")
                 return
 
-        pattern = r'<<<<<<< SEARCH\n(.*?)\n=======\n(.*?)\n>>>>>>> REPLACE'
+        # Regex mais flexível com espaços e newlines
+        pattern = r'<<<<<<< SEARCH\s*\n(.*?)\n=======\s*\n(.*?)\n>>>>>>> REPLACE'
         matches = re.findall(pattern, patch_text, re.DOTALL)
         
         if not matches:
@@ -918,6 +971,9 @@ class AIChatWidget(QWidget):
         new_text = target_text
         for search_block, replace_block in matches:
             if search_block in new_text:
+                # Se replace_block for vazio (apenas newline do regex), remove o bloco
+                if not replace_block.strip() and replace_block.count('\n') <= 1:
+                    replace_block = ""
                 new_text = new_text.replace(search_block, replace_block, 1)
             else:
                 QMessageBox.warning(self, "Erro", "Bloco de código original não encontrado.")

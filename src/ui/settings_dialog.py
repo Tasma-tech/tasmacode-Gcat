@@ -154,6 +154,11 @@ class SettingsDialog(QDialog):
 
         interface_layout.addWidget(lbl_theme)
         interface_layout.addWidget(combo_theme)
+        
+        chk_custom_title = QCheckBox("Usar Barra de Título Customizada (Requer Reinício)")
+        chk_custom_title.setChecked(self.current_config.get('use_custom_title_bar', False))
+        chk_custom_title.toggled.connect(lambda v: self._update_local('use_custom_title_bar', v))
+        interface_layout.addWidget(chk_custom_title)
         interface_layout.addStretch()
 
         # --- Configuração da Aba Sistema ---
