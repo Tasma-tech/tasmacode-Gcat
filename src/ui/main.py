@@ -49,6 +49,7 @@ from src.ui.custom_title_bar import CustomTitleBar
 from src.core.ui_logic.font_manager import FontManager
 from src.ui.batata_window import BatataWindow
 from src.core.editor_logic.marker_manager import MarkerManager
+from src.ui.tasmafile.tf_window import TasmaFileWindow
 
 class JCodeMainWindow(QMainWindow):
     """Janela principal do editor JCODE.
@@ -920,9 +921,16 @@ class JCodeMainWindow(QMainWindow):
             self.editor_group.tab_widget.setCurrentIndex((idx - 1) % count)
 
     def _open_project_dialog(self):
-
         """Abre diálogo para selecionar pasta de projeto."""
-        folder = QFileDialog.getExistingDirectory(self, "Abrir Pasta de Projeto")
+        if self.config_manager.get("use_tasmafile"):
+            dlg = TasmaFileWindow(self.config_manager, self.session_manager, root_dir, self.theme_manager, self)
+            if dlg.exec():
+                folder = dlg.selected_path
+            else:
+                folder = None
+        else:
+            folder = QFileDialog.getExistingDirectory(self, "Abrir Pasta de Projeto")
+            
         if folder:
             self._load_project(folder)
 

@@ -32,7 +32,8 @@ class ConfigManager(QObject):
             "smear_physics_preset": "Default",
             "smear_glow_color": "",
             "smear_opacity": 1.0,
-            "smear_sparks": False
+            "smear_sparks": False,
+            "use_tasmafile": True
         }
         self.config = self.load_config()
 

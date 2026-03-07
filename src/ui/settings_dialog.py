@@ -241,6 +241,11 @@ class SettingsDialog(QDialog):
         chk_restore.setChecked(self.current_config.get('restore_session'))
         chk_restore.toggled.connect(lambda v: self._update_local('restore_session', v))
         
+        chk_tasmafile = QCheckBox("Usar Gerenciador de Arquivos TasmaFile (Experimental)")
+        chk_tasmafile.setChecked(self.current_config.get('use_tasmafile', True))
+        chk_tasmafile.toggled.connect(lambda v: self._update_local('use_tasmafile', v))
+        
+        system_layout.addWidget(chk_tasmafile)
         system_layout.addWidget(chk_restore)
         system_layout.addStretch()
 
