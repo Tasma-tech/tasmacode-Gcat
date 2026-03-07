@@ -360,6 +360,11 @@ class JCodeMainWindow(QMainWindow):
         self.show_batata_action.setShortcut(Shortcuts.BATATA)
         self.show_batata_action.triggered.connect(self._show_batata_window)
 
+        # --- Diagram Action ---
+        self.diagram_action = QAction("Abrir Gerador de Diagramas", self)
+        self.diagram_action.setShortcut("F6")
+        self.diagram_action.triggered.connect(self._show_diagram_window)
+
         # --- Help Actions ---
         self.show_help_action = QAction("Guia de Atalhos", self)
         self.show_help_action.setShortcut(Shortcuts.HELP)
@@ -374,7 +379,8 @@ class JCodeMainWindow(QMainWindow):
             self.cut_action, self.copy_action, self.paste_action, self.find_action, self.rename_action, self.switch_project_action,
             self.toggle_sidebar_action, self.toggle_right_sidebar_action, self.focus_sidebar_search_action, self.show_help_action, self.close_tab_action, self.refresh_explorer_action, self.next_tab_action, self.prev_tab_action,
             self.zoom_in_action, self.zoom_out_action,
-            self.show_batata_action
+            self.show_batata_action,
+            self.diagram_action
         ])
 
     def _register_core_commands(self):
@@ -890,6 +896,31 @@ class JCodeMainWindow(QMainWindow):
         dlg = BatataWindow(self)
         self._apply_theme_to_dialog(dlg)
         dlg.exec()
+
+    def _show_diagram_window(self):
+        """Abre a janela do plugin dIAgram."""
+        try:
+            # Importa o plugin
+            from plugins.dIAgram.diagram import DiagramWindow
+
+            # Cria e mostra a janela
+            # Mantém referência para não ser coletado pelo GC
+            self.diagram_window = DiagramWindow(self)
+            self.diagram_window.show()
+
+            self.custom_statusbar.showMessage("Gerador de Diagramas aberto", 3000)
+        except ImportError as e:
+            QMessageBox.critical(
+                self,
+                "Plugin Não Encontrado",
+                f"O plugin dIAgram não foi encontrado: {e}"
+            )
+        except Exception as e:
+            QMessageBox.critical(
+                self,
+                "Erro",
+                f"Erro ao abrir o plugin: {e}"
+            )
 
     def _show_profile_window(self):
         """Abre a janela de perfil do GitHub."""

@@ -139,7 +139,7 @@ class AISettingsDialog(QDialog):
         
         # Model Selector
         self.model_combo = QComboBox()
-        models = ["llama-3.3-70b-versatile", "llama3-70b-8192", "mixtral-8x7b-32768", "gemma-7b-it"]
+        models = ["llama-3.3-70b-versatile", "llama3-70b-8192", "gemma-7b-it"]
         self.model_combo.addItems(models)
         current_model = self.api.get_config("groq_model", "llama-3.3-70b-versatile")
         self.model_combo.setCurrentText(current_model)
