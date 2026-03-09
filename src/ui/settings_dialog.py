@@ -16,7 +16,7 @@ class SettingsDialog(QDialog):
         self.current_config = config_manager.config.copy()
         
         self.setWindowTitle("Configurações")
-        self.resize(500, 400)
+        self.resize(600, 450) #a proporção dessa janela tava me incomodando 🫡👍
         self.setStyleSheet("background-color: #252526; color: #cccccc;")
 
         layout = QVBoxLayout(self)
