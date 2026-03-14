@@ -54,7 +54,7 @@ from src.ui.tasmafile.tf_window import TasmaFileWindow
 
 class JCodeMainWindow(QMainWindow):
     """Janela principal do editor JCODE.
-    b
+    b d
     Responsável por orquestrar a inicialização dos subsistemas Core  e UI.
     """
 
