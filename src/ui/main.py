@@ -2,7 +2,7 @@ import sys
 import os
 from PySide6.QtWidgets import QApplication, QMainWindow, QWidget, QVBoxLayout, QSplitter, QFileDialog, QInputDialog, QMessageBox, QMenu, QMenuBar
 from PySide6.QtGui import QKeySequence
-from PySide6.QtCore import Qt, QTimer
+from PySide6.QtCore import Qt, QTimer, QPropertyAnimation, QEasingCurve, QAbstractAnimation
 from PySide6.QtGui import QTextCursor, QAction, QKeySequence, QCursor
 from PySide6.QtCore import QDir
 # Ajuste de Path para garantir que imports funcionem a partir da raiz
@@ -844,9 +844,34 @@ class JCodeMainWindow(QMainWindow):
         )
 
     def _toggle_sidebar(self):
-        print("DEBUG: Atalho Ctrl+B acionado, alternando sidebar.")
-        if self.sidebar is not None:
-            self.sidebar.setVisible(not self.sidebar.isVisible())
+        if not self.sidebar:
+            return
+            
+        if hasattr(self, "_sidebar_anim") and self._sidebar_anim.state() == QAbstractAnimation.State.Running:
+            return
+
+        if self.sidebar.isVisible():
+            width = self.sidebar.width()
+            self._last_sidebar_width = width
+            self._sidebar_anim = QPropertyAnimation(self.sidebar, b"maximumWidth")
+            self._sidebar_anim.setDuration(250)
+            self._sidebar_anim.setStartValue(width)
+            self._sidebar_anim.setEndValue(0)
+            self._sidebar_anim.setEasingCurve(QEasingCurve.Type.InOutQuad)
+            self._sidebar_anim.finished.connect(lambda: self.sidebar.hide())
+            self._sidebar_anim.finished.connect(lambda: self.sidebar.setMaximumWidth(16777215))
+            self._sidebar_anim.start()
+        else:
+            width = getattr(self, "_last_sidebar_width", 250)
+            self.sidebar.setMaximumWidth(0)
+            self.sidebar.show()
+            self._sidebar_anim = QPropertyAnimation(self.sidebar, b"maximumWidth")
+            self._sidebar_anim.setDuration(250)
+            self._sidebar_anim.setStartValue(0)
+            self._sidebar_anim.setEndValue(width)
+            self._sidebar_anim.setEasingCurve(QEasingCurve.Type.InOutQuad)
+            self._sidebar_anim.finished.connect(lambda: self.sidebar.setMaximumWidth(16777215))
+            self._sidebar_anim.start()
 
     def _toggle_right_sidebar(self):
         if self.right_sidebar is not None:
