@@ -26,17 +26,37 @@ class SettingsDialog(QDialog):
         self.content_h_layout.setSpacing(0)
         self.content_h_layout.setContentsMargins(0, 0, 0, 0)
 
-        # --- Sidebar de Navegação ---
+        # --- Coluna da Sidebar (Navegação + Busca) ---
+        self.sidebar_container = QWidget()
+        self.sidebar_container.setFixedWidth(200)
+        self.sidebar_container.setStyleSheet("background-color: #2d2d2d; border-right: 1px solid #454545;")
+        self.sidebar_layout = QVBoxLayout(self.sidebar_container)
+        self.sidebar_layout.setContentsMargins(10, 10, 10, 10)
+        self.sidebar_layout.setSpacing(10)
+
+        # Barra de Pesquisa
+        self.sidebar_search = QLineEdit()
+        self.sidebar_search.setPlaceholderText("Buscar...")
+        self.sidebar_search.setStyleSheet("""
+            QLineEdit {
+                background-color: #3c3c3c;
+                color: #cccccc;
+                border: 1px solid #454545;
+                border-radius: 4px;
+                padding: 6px;
+            }
+            QLineEdit:focus { border: 1px solid #007acc; }
+        """)
+        self.sidebar_search.textChanged.connect(self._filter_sidebar)
+        self.sidebar_layout.addWidget(self.sidebar_search)
+
         self.sidebar = QListWidget()
-        self.sidebar.setFixedWidth(180)
         self.sidebar.setObjectName("SettingsSidebar")
         self.sidebar.setStyleSheet("""
             QListWidget#SettingsSidebar {
-                background-color: #2d2d2d;
+                background-color: transparent;
                 border: none;
-                border-right: 1px solid #454545;
                 outline: none;
-                padding: 10px;
             }
             QListWidget#SettingsSidebar::item {
                 padding: 12px;
@@ -53,11 +73,12 @@ class SettingsDialog(QDialog):
                 background-color: #2a2d2e;
             }
         """)
+        self.sidebar_layout.addWidget(self.sidebar)
 
         self.pages = QStackedWidget()
         self.pages.setStyleSheet("background-color: #1e1e1e; border: none;")
 
-        self.content_h_layout.addWidget(self.sidebar)
+        self.content_h_layout.addWidget(self.sidebar_container)
         self.content_h_layout.addWidget(self.pages, 1)
         self.main_layout.addLayout(self.content_h_layout)
 
@@ -437,3 +458,10 @@ class SettingsDialog(QDialog):
         print(f"[Config] Endereço do servidor atualizado para: {addr if addr else 'localhost (default)'}")
         self.config_manager.save_config(self.current_config)
         self.accept()
+
+    def _filter_sidebar(self, text):
+        """Filtra as categorias da sidebar com base no texto de pesquisa."""
+        text = text.lower()
+        for i in range(self.sidebar.count()):
+            item = self.sidebar.item(i)
+            item.setHidden(text not in item.text().lower())
