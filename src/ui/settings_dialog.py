@@ -1,6 +1,7 @@
 from PySide6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QTabWidget, QWidget, 
-                               QLabel, QSlider, QCheckBox, QComboBox, QPushButton, QDialogButtonBox, QLineEdit, QSpinBox, QColorDialog, QFileDialog, QMessageBox, QCompleter, QRadioButton)
-from PySide6.QtCore import Qt
+                               QLabel, QSlider, QCheckBox, QComboBox, QPushButton, QDialogButtonBox, QLineEdit, 
+                               QSpinBox, QColorDialog, QFileDialog, QMessageBox, QCompleter, QRadioButton, QListWidget, QStackedWidget, QScrollArea)
+from PySide6.QtCore import Qt, QSize
 from PySide6.QtGui import QColor, QFont
 
 class SettingsDialog(QDialog):
@@ -16,35 +17,87 @@ class SettingsDialog(QDialog):
         self.current_config = config_manager.config.copy()
         
         self.setWindowTitle("Configurações")
-        self.resize(840, 390) #a proporção dessa janela tava me incomodando 🫡👍 @JohnB : agora sim 
+        self.setMinimumSize(900, 600)
         self.setStyleSheet("background-color: #252526; color: #cccccc;")
 
-        layout = QVBoxLayout(self)
+        # Layout Principal (Horizontal: Sidebar | Conteúdo)
+        self.main_layout = QVBoxLayout(self)
+        self.content_h_layout = QHBoxLayout()
+        self.content_h_layout.setSpacing(0)
+        self.content_h_layout.setContentsMargins(0, 0, 0, 0)
 
-        # --- Abas ---
-        self.tabs = QTabWidget()
-        self.tabs.setStyleSheet("""
-            QTabWidget::pane { border: 1px solid #454545; }
-            QTabBar::tab { background: #333333; color: #cccccc; padding: 8px; }
-            QTabBar::tab:selected { background: #252526; border-top: 2px solid #007acc; }
+        # --- Sidebar de Navegação ---
+        self.sidebar = QListWidget()
+        self.sidebar.setFixedWidth(180)
+        self.sidebar.setObjectName("SettingsSidebar")
+        self.sidebar.setStyleSheet("""
+            QListWidget#SettingsSidebar {
+                background-color: #2d2d2d;
+                border: none;
+                border-right: 1px solid #454545;
+                outline: none;
+                padding: 10px;
+            }
+            QListWidget#SettingsSidebar::item {
+                padding: 12px;
+                border-radius: 6px;
+                margin-bottom: 4px;
+                color: #858585;
+                font-weight: bold;
+            }
+            QListWidget#SettingsSidebar::item:selected {
+                background-color: #37373d;
+                color: white;
+            }
+            QListWidget#SettingsSidebar::item:hover:!selected {
+                background-color: #2a2d2e;
+            }
         """)
-        
-        self.tab_editor = QWidget()
-        self.tab_interface = QWidget()
-        self.tab_system = QWidget()
-        self.tab_network = QWidget()
-        
-        self.tabs.addTab(self.tab_editor, "Editor")
-        self.tabs.addTab(self.tab_interface, "Interface")
-        self.tabs.addTab(self.tab_system, "Sistema")
-        self.tabs.addTab(self.tab_network, "Rede")
-        
-        layout.addWidget(self.tabs)
 
-        # --- Configuração da Aba Editor ---
-        editor_layout = QVBoxLayout(self.tab_editor)
+        self.pages = QStackedWidget()
+        self.pages.setStyleSheet("background-color: #1e1e1e; border: none;")
+
+        self.content_h_layout.addWidget(self.sidebar)
+        self.content_h_layout.addWidget(self.pages, 1)
+        self.main_layout.addLayout(self.content_h_layout)
+
+        # Categorias
+        categories = [
+            ("Editor", self._create_editor_page()),
+            ("Interface", self._create_interface_page()),
+            ("Sistema", self._create_system_page()),
+            ("Rede", self._create_network_page())
+        ]
+
+        for name, page in categories:
+            self.sidebar.addItem(name)
+            self.pages.addWidget(page)
+
+        self.sidebar.currentRowChanged.connect(self.pages.setCurrentIndex)
+        self.sidebar.setCurrentRow(0)
+
+        # --- Botões de Ação ---
+        self._setup_action_buttons()
+
+    def _create_scroll_page(self, layout):
+        widget = QWidget()
+        widget.setLayout(layout)
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setWidget(widget)
+        scroll.setStyleSheet("background: transparent; border: none;")
+        return scroll
+
+    def _create_editor_page(self):
+        layout = QVBoxLayout()
+        layout.setContentsMargins(30, 20, 30, 20)
+        layout.setSpacing(15)
         
         # Família da Fonte
+        lbl_font_header = QLabel("TIPOGRAFIA")
+        lbl_font_header.setStyleSheet("font-weight: bold; color: #569cd6; font-size: 11px;")
+        layout.addWidget(lbl_font_header)
+
         lbl_font_family = QLabel("Fonte do Editor:")
         
         font_selection_layout = QHBoxLayout()
@@ -136,9 +189,12 @@ class SettingsDialog(QDialog):
         slider_delay.valueChanged.connect(lambda v: (lbl_delay.setText(f"Atraso do Autocomplete (ms): {v}"), self._update_local('autocomplete_delay', v)))
 
         # Smear Cursor Settings
-        lbl_smear_title = QLabel("Smear Cursor:")
-        lbl_smear_title.setStyleSheet("font-weight: bold; margin-top: 10px;")
+        lbl_smear_header = QLabel("EFEITOS VISUAIS")
+        lbl_smear_header.setStyleSheet("font-weight: bold; color: #569cd6; font-size: 11px; margin-top: 15px;")
+        layout.addWidget(lbl_smear_header)
 
+        lbl_smear_title = QLabel("Smear Cursor (Rastro do Cursor):")
+        
         # Physics Preset
         lbl_preset = QLabel("Preset de Física:")
         self.combo_preset = QComboBox()
@@ -182,38 +238,41 @@ class SettingsDialog(QDialog):
         chk_sparks.setChecked(self.current_config.get('smear_sparks', False))
         chk_sparks.toggled.connect(lambda v: (self._update_local('smear_sparks', v), self._apply_live()))
 
-        lbl_beta = QLabel("Nota: Funcionalidade em testes beta. Pode apresentar instabilidade.")
+        lbl_beta = QLabel("O efeito Smear Cursor pode impactar o desempenho em computadores antigos.")
         lbl_beta.setStyleSheet("color: #808080; font-style: italic; font-size: 11px; margin-left: 20px;")
 
-        editor_layout.addWidget(lbl_font_family)
-        editor_layout.addLayout(font_selection_layout)
-        editor_layout.addWidget(self.lbl_font_preview)
-        editor_layout.addWidget(lbl_font)
-        editor_layout.addWidget(slider_font)
-        editor_layout.addWidget(chk_ligatures)
-        editor_layout.addWidget(chk_lines)
-        editor_layout.addWidget(chk_indent)
-        editor_layout.addWidget(chk_autocomplete)
-        editor_layout.addWidget(lbl_wrap_title)
-        editor_layout.addWidget(radio_horizontal)
-        editor_layout.addWidget(radio_wrap)
-        editor_layout.addWidget(lbl_delay)
-        editor_layout.addWidget(slider_delay)
-        editor_layout.addWidget(lbl_smear_title)
-        editor_layout.addWidget(lbl_preset)
-        editor_layout.addWidget(self.combo_preset)
-        editor_layout.addWidget(lbl_stiffness)
-        editor_layout.addWidget(self.slider_stiffness)
-        editor_layout.addWidget(lbl_opacity)
-        editor_layout.addWidget(slider_opacity)
-        editor_layout.addWidget(chk_sparks)
-        editor_layout.addWidget(lbl_glow)
-        editor_layout.addLayout(glow_layout)
-        editor_layout.addWidget(lbl_beta)
-        editor_layout.addStretch()
+        layout.addWidget(lbl_font_family)
+        layout.addLayout(font_selection_layout)
+        layout.addWidget(self.lbl_font_preview)
+        layout.addWidget(lbl_font)
+        layout.addWidget(slider_font)
+        layout.addWidget(chk_ligatures)
+        layout.addWidget(chk_lines)
+        layout.addWidget(chk_indent)
+        layout.addWidget(chk_autocomplete)
+        layout.addWidget(lbl_wrap_title)
+        layout.addWidget(radio_horizontal)
+        layout.addWidget(radio_wrap)
+        layout.addWidget(lbl_delay)
+        layout.addWidget(slider_delay)
+        layout.addWidget(lbl_smear_title)
+        layout.addWidget(lbl_preset)
+        layout.addWidget(self.combo_preset)
+        layout.addWidget(lbl_stiffness)
+        layout.addWidget(self.slider_stiffness)
+        layout.addWidget(lbl_opacity)
+        layout.addWidget(slider_opacity)
+        layout.addWidget(chk_sparks)
+        layout.addWidget(lbl_glow)
+        layout.addLayout(glow_layout)
+        layout.addWidget(lbl_beta)
+        layout.addStretch()
+        
+        return self._create_scroll_page(layout)
 
-        # --- Configuração da Aba Interface ---
-        interface_layout = QVBoxLayout(self.tab_interface)
+    def _create_interface_page(self):
+        layout = QVBoxLayout()
+        layout.setContentsMargins(30, 20, 30, 20)
         
         lbl_theme = QLabel("Tema:")
         combo_theme = QComboBox()
@@ -225,17 +284,20 @@ class SettingsDialog(QDialog):
             combo_theme.setCurrentText(current_theme)
         combo_theme.currentTextChanged.connect(lambda v: (self._update_local('theme', v), self._apply_live()))
 
-        interface_layout.addWidget(lbl_theme)
-        interface_layout.addWidget(combo_theme)
+        layout.addWidget(lbl_theme)
+        layout.addWidget(combo_theme)
         
         chk_custom_title = QCheckBox("Usar Barra de Título Customizada (Requer Reinício)")
         chk_custom_title.setChecked(self.current_config.get('use_custom_title_bar', False))
         chk_custom_title.toggled.connect(lambda v: self._update_local('use_custom_title_bar', v))
-        interface_layout.addWidget(chk_custom_title)
-        interface_layout.addStretch()
+        layout.addWidget(chk_custom_title)
+        layout.addStretch()
+        
+        return self._create_scroll_page(layout)
 
-        # --- Configuração da Aba Sistema ---
-        system_layout = QVBoxLayout(self.tab_system)
+    def _create_system_page(self):
+        layout = QVBoxLayout()
+        layout.setContentsMargins(30, 20, 30, 20)
         
         chk_restore = QCheckBox("Restaurar sessão anterior ao iniciar")
         chk_restore.setChecked(self.current_config.get('restore_session'))
@@ -245,12 +307,15 @@ class SettingsDialog(QDialog):
         chk_tasmafile.setChecked(self.current_config.get('use_tasmafile', True))
         chk_tasmafile.toggled.connect(lambda v: self._update_local('use_tasmafile', v))
         
-        system_layout.addWidget(chk_tasmafile)
-        system_layout.addWidget(chk_restore)
-        system_layout.addStretch()
+        layout.addWidget(chk_tasmafile)
+        layout.addWidget(chk_restore)
+        layout.addStretch()
+        
+        return self._create_scroll_page(layout)
 
-        # --- Configuração da Aba Rede ---
-        network_layout = QVBoxLayout(self.tab_network)
+    def _create_network_page(self):
+        layout = QVBoxLayout()
+        layout.setContentsMargins(30, 20, 30, 20)
         
         # Live Server Settings
         lbl_ls_title = QLabel("Live Server:")
@@ -277,15 +342,18 @@ class SettingsDialog(QDialog):
         lbl_note.setStyleSheet("font-style: italic; color: #808080; font-size: 11px; margin-top: 5px;")
         lbl_note.setWordWrap(True)
         
-        network_layout.addWidget(lbl_ls_title)
-        network_layout.addWidget(chk_ls_browser)
-        network_layout.addWidget(lbl_ls_port)
-        network_layout.addWidget(spin_ls_port)
-        network_layout.addWidget(lbl_server)
-        network_layout.addWidget(self.txt_server)
-        network_layout.addWidget(lbl_note)
-        network_layout.addStretch()
+        layout.addWidget(lbl_ls_title)
+        layout.addWidget(chk_ls_browser)
+        layout.addWidget(lbl_ls_port)
+        layout.addWidget(spin_ls_port)
+        layout.addWidget(lbl_server)
+        layout.addWidget(self.txt_server)
+        layout.addWidget(lbl_note)
+        layout.addStretch()
+        
+        return self._create_scroll_page(layout)
 
+    def _setup_action_buttons(self):
         # --- Botões de Ação ---
         btn_box = QHBoxLayout()
         btn_apply = QPushButton("Aplicar")
@@ -293,18 +361,18 @@ class SettingsDialog(QDialog):
         btn_cancel = QPushButton("Cancelar")
         
         for btn in [btn_apply, btn_save, btn_cancel]:
-            btn.setStyleSheet("background-color: #3c3c3c; color: white; padding: 6px 12px; border: 1px solid #454545;")
+            btn.setStyleSheet("background-color: #3c3c3c; color: white; padding: 8px 16px; border: 1px solid #454545; border-radius: 4px;")
+            btn.setCursor(Qt.CursorShape.PointingHandCursor)
         
         btn_apply.clicked.connect(self._apply_live)
         btn_save.clicked.connect(self._save_and_close)
         btn_cancel.clicked.connect(self.reject)
         
         btn_box.addStretch()
-        btn_box.addWidget(btn_apply)
-        btn_box.addWidget(btn_save)
         btn_box.addWidget(btn_cancel)
+        btn_box.addWidget(btn_save)
         
-        layout.addLayout(btn_box)
+        self.main_layout.addLayout(btn_box)
 
     def _update_local(self, key, value):
         self.current_config[key] = value
