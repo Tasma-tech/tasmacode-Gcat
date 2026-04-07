@@ -4,7 +4,7 @@ from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLineE
 from PySide6.QtCore import Qt, QRect, QPointF, Signal, QPoint
 from PySide6.QtGui import (QPainter, QColor, QPen, QBrush, QFont, QPainterPath,
                            QFontMetrics, QCursor, QSyntaxHighlighter, QTextCharFormat, QPixmap)
-from PySide6.QtCore import QThread
+from PySide6.QtCore import QThread, QPropertyAnimation, QEasingCurve, QAbstractAnimation
 from src.core.git_logic import GitLogic
 
 class CommitStatsThread(QThread):
@@ -878,9 +878,33 @@ class RightSidebar(QWidget):
 
     def _toggle_section(self, list_widget, button):
         """Expande ou recolhe a lista de arquivos."""
-        visible = list_widget.isVisible()
-        list_widget.setVisible(not visible)
-        button.setArrowType(Qt.RightArrow if visible else Qt.DownArrow)
+        is_visible = list_widget.isVisible()
+        
+        if hasattr(list_widget, "_anim") and list_widget._anim.state() == QAbstractAnimation.State.Running:
+            return
+
+        target_height = 150 if list_widget == self.staged_list else 200
+
+        if is_visible:
+            list_widget._anim = QPropertyAnimation(list_widget, b"maximumHeight")
+            list_widget._anim.setDuration(200)
+            list_widget._anim.setStartValue(list_widget.height())
+            list_widget._anim.setEndValue(0)
+            list_widget._anim.setEasingCurve(QEasingCurve.Type.InOutQuad)
+            list_widget._anim.finished.connect(lambda: list_widget.setVisible(False))
+            list_widget._anim.finished.connect(lambda: list_widget.setMaximumHeight(target_height))
+            button.setArrowType(Qt.RightArrow)
+        else:
+            list_widget.setMaximumHeight(0)
+            list_widget.setVisible(True)
+            list_widget._anim = QPropertyAnimation(list_widget, b"maximumHeight")
+            list_widget._anim.setDuration(200)
+            list_widget._anim.setStartValue(0)
+            list_widget._anim.setEndValue(target_height)
+            list_widget._anim.setEasingCurve(QEasingCurve.Type.InOutQuad)
+            button.setArrowType(Qt.DownArrow)
+            
+        list_widget._anim.start()
 
     def _refresh_files(self):
         """Atualiza a lista de arquivos modificados."""

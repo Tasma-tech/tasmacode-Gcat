@@ -1,6 +1,8 @@
 from PySide6.QtWidgets import QStatusBar, QLabel, QPushButton, QWidget, QHBoxLayout, QStyle, QMenu
 from PySide6.QtCore import Qt, QTimer, QSize, Signal
-from PySide6.QtGui import QPixmap
+from PySide6.QtGui import QPixmap, QIcon
+import os
+import json
 
 class ClickableLabel(QLabel):
     """Label que emite sinal ao ser clicado."""
@@ -16,9 +18,20 @@ class StatusBar(QStatusBar):
     live_server_toggle_requested = Signal(bool)
     avatar_clicked = Signal()
 
+    WIDGET_DEFAULTS = {
+        "avatar": True, "cursor_info": True, "indent": True,
+        "encoding": True, "language": True, "live_server": True,
+        "live_link": True, "notifications": True
+    }
+
     def __init__(self, parent=None):
         self.theme = None
         super().__init__(parent)
+        
+        # Configuração de visibilidade
+        self.config_dir = os.path.join(os.path.expanduser("~"), ".jcode")
+        self.config_file = os.path.join(self.config_dir, "statusbar.json")
+        self.widget_visibility = {}
         
         # Remove a alça de redimensionamento padrão para visual mais limpo
         self.setSizeGripEnabled(False)
@@ -88,6 +101,22 @@ class StatusBar(QStatusBar):
 
         self.addPermanentWidget(self.right_container)
         
+        # Mapeamento de widgets para configuração
+        self.widgets_map = {
+            "avatar": self.lbl_avatar,
+            "cursor_info": self.lbl_cursor,
+            "indent": self.lbl_indent,
+            "encoding": self.lbl_encoding,
+            "language": self.btn_lang,
+            "live_server": self.btn_live_server,
+            "live_link": self.lbl_live_link,
+            "notifications": self.btn_bell
+        }
+        
+        # Carrega e aplica configurações de visibilidade
+        self._load_visibility_config()
+        self._apply_visibility()
+        
         # Timer para restaurar estilo após flash
         self.flash_timer = QTimer(self)
         self.flash_timer.setSingleShot(True)
@@ -96,6 +125,44 @@ class StatusBar(QStatusBar):
         self._default_style = "background-color: #333; color: white;"
         self.setStyleSheet(self._default_style)
         self.showMessage("Pronto")
+
+    def _load_visibility_config(self):
+        # Começa com uma cópia nova dos padrões
+        config = self.WIDGET_DEFAULTS.copy()
+
+        if os.path.exists(self.config_file):
+            try:
+                with open(self.config_file, 'r') as f:
+                    # Garante que o arquivo não esteja vazio antes de tentar carregar
+                    if os.path.getsize(self.config_file) > 0:
+                        user_config = json.load(f)
+                        if isinstance(user_config, dict):
+                            config.update(user_config) # Sobrescreve padrões com as configs do usuário
+            except (json.JSONDecodeError, IOError) as e:
+                # Se o arquivo estiver corrompido ou ilegível, usa os padrões.
+                print(f"Aviso: '{self.config_file}' corrompido. Usando padrões. Erro: {e}")
+        
+        self.widget_visibility = config
+
+    def _save_visibility_config(self):
+        try:
+            os.makedirs(self.config_dir, exist_ok=True)
+            with open(self.config_file, 'w') as f:
+                json.dump(self.widget_visibility, f, indent=4)
+        except IOError as e:
+            print(f"Erro ao salvar configuração da statusbar: {e}")
+
+    def _apply_visibility(self):
+        for name, widget in self.widgets_map.items():
+            is_visible = self.widget_visibility.get(name, True)
+            # O link do live server tem uma lógica especial
+            if name == 'live_link':
+                if self.btn_live_server.isChecked():
+                    widget.setVisible(is_visible)
+                else:
+                    widget.setVisible(False)
+            else:
+                widget.setVisible(is_visible)
 
     def _create_label(self, text, min_width=0):
         lbl = QLabel(text)
@@ -111,8 +178,71 @@ class StatusBar(QStatusBar):
     def update_filename(self, filename: str):
         self.showMessage(filename)
 
+    def _get_language_from_path(self, path: str) -> str:
+        """Determina a linguagem de programação com base na extensão do arquivo."""
+        ext_map = {
+            '.py': 'Python',
+            '.js': 'JavaScript',
+            '.jsx': 'JavaScript (React)',
+            '.ts': 'TypeScript',
+            '.tsx': 'TypeScript (React)',
+            '.html': 'HTML',
+            '.htm': 'HTML',
+            '.css': 'CSS',
+            '.scss': 'SCSS',
+            '.json': 'JSON',
+            '.xml': 'XML',
+            '.md': 'Markdown',
+            '.c': 'C',
+            '.cpp': 'C++',
+            '.h': 'C/C++ Header',
+            '.java': 'Java',
+            '.rs': 'Rust',
+        }
+        _, ext = os.path.splitext(path)
+        return ext_map.get(ext.lower(), "Plain Text")
+
+    def update_language_display(self, file_path: str | None, is_code_editor: bool):
+        """Atualiza o display de linguagem com base no editor e caminho."""
+        if not is_code_editor:
+            self.update_lang("") # Limpa para visualizadores
+            return
+        
+        if file_path:
+            lang = self._get_language_from_path(file_path)
+            self.update_lang(lang)
+        else:
+            # É um CodeEditor, mas sem caminho (arquivo novo)
+            self.update_lang("Plain Text")
+
+    def _get_icon_for_lang(self, lang):
+        """Retorna um ícone apropriado para a linguagem."""
+        if not lang:
+            return QIcon()
+        
+        # Mapeamento para ícones de tema do sistema (padrão Freedesktop)
+        mime_map = {
+            "Python": "text-x-python",
+            "JavaScript": "text-javascript",
+            "HTML": "text-html",
+            "CSS": "text-css",
+            "C++": "text-x-c++src",
+            "Rust": "text-rust",
+            "Java": "text-x-java",
+            "Plain Text": "text-plain"
+        }
+        
+        icon_name = mime_map.get(lang, "text-plain")
+        icon = QIcon.fromTheme(icon_name)
+        
+        # Fallback para ícone genérico se o tema não tiver o ícone específico
+        if icon.isNull():
+            return self.style().standardIcon(QStyle.StandardPixmap.SP_FileIcon)
+        return icon
+
     def update_lang(self, lang):
         self.btn_lang.setText(lang)
+        self.btn_lang.setIcon(self._get_icon_for_lang(lang))
 
     def set_live_server_state(self, running: bool, host: str = "", port: int = 0):
         """Atualiza a aparência do botão do live server."""
@@ -124,7 +254,10 @@ class StatusBar(QStatusBar):
             
             url = f"http://{host}:{port}"
             self.lbl_live_link.setText(f"<a href='{url}' style='color: #4da6ff; text-decoration: none;'>{url}</a>")
-            self.lbl_live_link.show()
+            
+            # Apenas mostra se a configuração permitir
+            if self.widget_visibility.get("live_link", True):
+                self.lbl_live_link.show()
         else:
             self.btn_live_server.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_MediaStop))
             self.btn_live_server.setToolTip("Iniciar Live Server")
@@ -136,10 +269,6 @@ class StatusBar(QStatusBar):
         self.showMessage(text)
         self.setStyleSheet(f"background-color: {color}; color: white;")
         self.flash_timer.start(duration)
-
-    def _reset_style(self):
-        self.setStyleSheet(self._default_style)
-        self.clearMessage()
 
     def set_avatar(self, image_bytes):
         if image_bytes:
@@ -175,3 +304,34 @@ class StatusBar(QStatusBar):
         if self.theme:
             self.apply_theme(self.theme)
         self.clearMessage()
+
+    def contextMenuEvent(self, event):
+        menu = QMenu(self)
+        if self.theme:
+            bg = self.theme.get("sidebar_bg", "#252526")
+            fg = self.theme.get("foreground", "#cccccc")
+            accent = self.theme.get("accent", "#007acc")
+            menu.setStyleSheet(f"QMenu {{ background-color: {bg}; color: {fg}; }} QMenu::item:selected {{ background-color: {accent}; }}")
+
+        menu.addSection("Exibir na Barra de Status")
+
+        name_map = {
+            "avatar": "Avatar do Perfil", "cursor_info": "Posição do Cursor",
+            "indent": "Indentação", "encoding": "Codificação",
+            "language": "Linguagem", "live_server": "Botão Live Server",
+            "live_link": "Link do Live Server", "notifications": "Notificações"
+        }
+
+        for key, name in name_map.items():
+            action = menu.addAction(name)
+            action.setCheckable(True)
+            action.setChecked(self.widget_visibility.get(key, True))
+            action.triggered.connect(lambda checked, k=key: self._toggle_widget_visibility(k, checked))
+
+        menu.exec(event.globalPos())
+
+    def _toggle_widget_visibility(self, key, visible):
+        self.widget_visibility[key] = visible
+        if key in self.widgets_map:
+            self.widgets_map[key].setVisible(visible)
+        self._save_visibility_config()

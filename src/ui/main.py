@@ -2,7 +2,7 @@ import sys
 import os
 from PySide6.QtWidgets import QApplication, QMainWindow, QWidget, QVBoxLayout, QSplitter, QFileDialog, QInputDialog, QMessageBox, QMenu, QMenuBar
 from PySide6.QtGui import QKeySequence
-from PySide6.QtCore import Qt, QTimer
+from PySide6.QtCore import Qt, QTimer, QPropertyAnimation, QEasingCurve, QAbstractAnimation
 from PySide6.QtGui import QTextCursor, QAction, QKeySequence, QCursor
 from PySide6.QtCore import QDir
 # Ajuste de Path para garantir que imports funcionem a partir da raiz
@@ -54,7 +54,7 @@ from src.ui.tasmafile.tf_window import TasmaFileWindow
 
 class JCodeMainWindow(QMainWindow):
     """Janela principal do editor JCODE.
-    
+    b d
     Responsável por orquestrar a inicialização dos subsistemas Core  e UI.
     """
 
@@ -606,13 +606,20 @@ class JCodeMainWindow(QMainWindow):
             self.event_handler.buffer = editor_widget.buffer
             self.viewport_controller.attach_to(editor_widget)
             
+            is_code_editor = isinstance(editor_widget, CodeEditor)
+            
             # Conecta sinais do novo editor
-            if isinstance(editor_widget, CodeEditor):
+            if is_code_editor:
                 editor_widget.markers_changed.connect(self._update_sidebar_markers)
                 self._update_sidebar_markers() # Atualiza inicial
+
+            # Atualiza a linguagem na barra de status
+            file_path = editor_widget.property("file_path")
+            self.custom_statusbar.update_language_display(file_path, is_code_editor)
         else:
             self.event_handler.buffer = None
             self.sidebar.update_markers([]) # Limpa marcadores
+            self.custom_statusbar.update_language_display(None, False)
             
         self._on_buffer_modified()
         # Limpa os highlights de busca ao trocar de aba
@@ -778,6 +785,7 @@ class JCodeMainWindow(QMainWindow):
         
         self.custom_statusbar.apply_theme(self.theme_manager.current_theme)
         self.right_sidebar.apply_theme(self.theme_manager.current_theme)
+        self.editor_group.apply_theme(self.theme_manager.current_theme)
         
         if hasattr(self, 'custom_title_bar'):
             self.custom_title_bar.apply_theme(self.theme_manager.current_theme)
@@ -843,9 +851,34 @@ class JCodeMainWindow(QMainWindow):
         )
 
     def _toggle_sidebar(self):
-        print("DEBUG: Atalho Ctrl+B acionado, alternando sidebar.")
-        if self.sidebar is not None:
-            self.sidebar.setVisible(not self.sidebar.isVisible())
+        if not self.sidebar:
+            return
+            
+        if hasattr(self, "_sidebar_anim") and self._sidebar_anim.state() == QAbstractAnimation.State.Running:
+            return
+
+        if self.sidebar.isVisible():
+            width = self.sidebar.width()
+            self._last_sidebar_width = width
+            self._sidebar_anim = QPropertyAnimation(self.sidebar, b"maximumWidth")
+            self._sidebar_anim.setDuration(250)
+            self._sidebar_anim.setStartValue(width)
+            self._sidebar_anim.setEndValue(0)
+            self._sidebar_anim.setEasingCurve(QEasingCurve.Type.InOutQuad)
+            self._sidebar_anim.finished.connect(lambda: self.sidebar.hide())
+            self._sidebar_anim.finished.connect(lambda: self.sidebar.setMaximumWidth(16777215))
+            self._sidebar_anim.start()
+        else:
+            width = getattr(self, "_last_sidebar_width", 250)
+            self.sidebar.setMaximumWidth(0)
+            self.sidebar.show()
+            self._sidebar_anim = QPropertyAnimation(self.sidebar, b"maximumWidth")
+            self._sidebar_anim.setDuration(250)
+            self._sidebar_anim.setStartValue(0)
+            self._sidebar_anim.setEndValue(width)
+            self._sidebar_anim.setEasingCurve(QEasingCurve.Type.InOutQuad)
+            self._sidebar_anim.finished.connect(lambda: self.sidebar.setMaximumWidth(16777215))
+            self._sidebar_anim.start()
 
     def _toggle_right_sidebar(self):
         if self.right_sidebar is not None:
@@ -1017,8 +1050,6 @@ class JCodeMainWindow(QMainWindow):
         self.custom_statusbar.set_live_server_state(False)
         self.custom_statusbar.flash_message("Live Server parado.", color="#007acc")
 
-
-
     def _close_all_files(self):
         """Fecha todos os arquivos abertos, perguntando se deseja salvar."""
         count = self.editor_group.tab_widget.count()
@@ -1172,6 +1203,7 @@ class JCodeMainWindow(QMainWindow):
         path, _ = QFileDialog.getSaveFileName(self, "Salvar Como...")
         if path:
             self.active_editor.set_file_path(path)
+            self.custom_statusbar.update_language_display(path, True)
             self._save_file()
 
     def _open_file(self, path):

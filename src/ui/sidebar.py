@@ -126,6 +126,7 @@ class Sidebar(QWidget):
         self.tree.setDropIndicatorShown(True)
         self.tree.setDragDropMode(QTreeView.DragDropMode.DragDrop)
         self.tree.setDefaultDropAction(Qt.DropAction.MoveAction)
+        self.tree.setAnimated(True)
         
         self.tree.doubleClicked.connect(self._on_tree_double_click)
         

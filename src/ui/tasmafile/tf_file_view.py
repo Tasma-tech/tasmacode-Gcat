@@ -1,10 +1,11 @@
 from PySide6.QtWidgets import (QWidget, QVBoxLayout, QListView, QFileSystemModel, QLineEdit, 
-                               QAbstractItemView, QHBoxLayout, QPushButton, QStyle, QMenu, 
+                               QAbstractItemView, QHBoxLayout, QPushButton, QStyle, QMenu, QListWidget, QListWidgetItem,
                                QInputDialog, QMessageBox, QToolTip, QScrollArea, QFrame, 
-                               QSlider, QComboBox, QLabel, QSpinBox)
+                               QSlider, QComboBox, QLabel, QSpinBox, QStackedWidget)
 from PySide6.QtCore import Qt, Signal, QDir, QSize, QEvent, QThread, QDateTime, QSortFilterProxyModel
 from PySide6.QtGui import QKeySequence, QCursor
 from src.core.editor_logic.file_manager import FileManager
+from src.core.tasmafile.search_engine import FileSearchEngine
 import os
 import shutil
 
@@ -111,6 +112,8 @@ class TasmaFileView(QWidget):
         self._history = []
         self._future = []
         self._is_navigating_history = False
+        self._search_thread = None
+        self._is_search_mode = False
         
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -144,9 +147,23 @@ class TasmaFileView(QWidget):
         self.address_bar.setReadOnly(True)
         self.address_bar.setFixedHeight(32)
 
+        self.search_input = QLineEdit()
+        self.search_input.setPlaceholderText("Buscar no conteúdo...")
+        self.search_input.setFixedHeight(32)
+        self.search_input.returnPressed.connect(self._start_content_search)
+
+        self.btn_clear_search = QPushButton()
+        self.btn_clear_search.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_DialogCloseButton))
+        self.btn_clear_search.setFixedSize(32, 32)
+        self.btn_clear_search.setToolTip("Limpar busca e voltar à navegação")
+        self.btn_clear_search.clicked.connect(self._clear_search)
+        self.btn_clear_search.hide()
+
         nav_layout.addWidget(self.btn_back)
         nav_layout.addWidget(self.btn_forward)
-        nav_layout.addWidget(self.address_bar)
+        nav_layout.addWidget(self.address_bar, 1)
+        nav_layout.addWidget(self.search_input, 1)
+        nav_layout.addWidget(self.btn_clear_search)
         top_bar_layout.addLayout(nav_layout)
 
         # Linha 2: Controles de Visualização
@@ -272,6 +289,8 @@ class TasmaFileView(QWidget):
         self.model.directoryLoaded.connect(self._on_directory_loaded)
         
         self.proxy_model = AdvancedFileFilterProxyModel(self)
+        self.proxy_model.setFilterCaseSensitivity(Qt.CaseSensitivity.CaseInsensitive)
+        self.proxy_model.setRecursiveFilteringEnabled(True)
         self.proxy_model.setSourceModel(self.model)
         
         # List View (Modo Ícones / Grid)
@@ -308,7 +327,15 @@ class TasmaFileView(QWidget):
         self.filter_size_unit.currentIndexChanged.connect(self._apply_filters)
         self.filter_date_combo.currentIndexChanged.connect(self._apply_filters)
         
-        layout.addWidget(self.list_view)
+        # Stack para alternar entre Navegador e Busca
+        self.view_stack = QStackedWidget()
+        self.search_results_view = QListWidget()
+        self.search_results_view.itemDoubleClicked.connect(self._on_search_result_activated)
+
+        self.view_stack.addWidget(self.list_view)
+        self.view_stack.addWidget(self.search_results_view)
+
+        layout.addWidget(self.view_stack)
 
     def _set_icon_mode(self):
         """Configura visualização em grade (ícones grandes)."""
@@ -368,6 +395,8 @@ class TasmaFileView(QWidget):
         self.btn_sort_order.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_ArrowUp if is_descending else QStyle.StandardPixmap.SP_ArrowDown))
         
         self.proxy_model.sort(column, order)
+        if self._is_search_mode:
+            self._clear_search()
 
     def _on_zoom_changed(self, value):
         if self.list_view.viewMode() == QListView.IconMode:
@@ -378,6 +407,8 @@ class TasmaFileView(QWidget):
         self.filters_widget.setVisible(checked)
 
     def _apply_filters(self):
+        if self._is_search_mode: self._clear_search()
+
         if not hasattr(self, 'proxy_model'): return
 
         self.proxy_model.set_extension_filter(self.filter_ext_input.text())
@@ -443,6 +474,7 @@ class TasmaFileView(QWidget):
         self.btn_toggle_filters.setStyleSheet(tool_button_style)
         self.btn_toggle_preview.setStyleSheet(tool_button_style)
         self.btn_sort_order.setStyleSheet(tool_button_style)
+        self.btn_clear_search.setStyleSheet(tool_button_style)
 
         self.filters_widget.setStyleSheet(f"QFrame#FiltersFrame {{ background-color: {input_bg}; border-top: 1px solid {border}; }}")
         filter_input_style = f"background-color: {bg}; color: {fg}; border: 1px solid {border}; padding: 4px; border-radius: 4px;"
@@ -451,6 +483,8 @@ class TasmaFileView(QWidget):
         self.filter_size_val.setStyleSheet(filter_input_style)
         self.filter_size_unit.setStyleSheet(filter_input_style)
         self.filter_date_combo.setStyleSheet(filter_input_style)
+        
+        self.search_input.setStyleSheet(f"background-color: {input_bg}; color: {fg}; padding: 8px; border: 1px solid {border}; border-radius: 4px;")
 
         self.sort_combo.setStyleSheet(f"QComboBox {{ background-color: {input_bg}; color: {fg}; border: 1px solid {border}; padding: 4px; border-radius: 4px; }}")
         self.zoom_slider.setStyleSheet("QSlider::groove:horizontal { border: 1px solid #bbb; background: white; height: 10px; border-radius: 4px; } QSlider::handle:horizontal { background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #eee, stop:1 #ccc); border: 1px solid #777; width: 18px; margin: -2px 0; border-radius: 4px; }")
@@ -482,11 +516,20 @@ class TasmaFileView(QWidget):
             QListView::item:selected {{ background-color: {selection}; color: white; border: 1px solid {accent}; }}
             QListView::item:hover {{ background-color: {border}; }}
         """)
+        
+        self.search_results_view.setStyleSheet(f"""
+            QListWidget {{ background-color: {bg}; color: {fg}; border: none; outline: none; }}
+            QListWidget::item {{ border-bottom: 1px solid {border}; }}
+            QListWidget::item:selected {{ background-color: {selection}; border-left: 2px solid {accent}; }}
+            QListWidget::item:hover {{ background-color: {border}; }}
+        """)
 
     def set_path(self, path):
+        # Ao navegar, sempre cancela o modo de busca
+        if self._is_search_mode:
+            self._clear_search()
+
         if path == "plugins_virtual_root":
-            # TODO: Implementar visualização virtual de plugins se necessário
-            # Por enquanto redireciona para home
             path = QDir.homePath()
             
         # History management
@@ -678,3 +721,68 @@ class TasmaFileView(QWidget):
         text = f"<b>{os.path.basename(path)}</b><br>Arquivos: {count}<br>Tamanho: {size_gb:.2f} GB"
         # Verifica se o mouse ainda está sobre o item (opcional, mas bom para UX)
         QToolTip.showText(QCursor.pos(), text, self.list_view)
+
+    def _start_content_search(self):
+        query = self.search_input.text()
+        if not query:
+            self._clear_search()
+            return
+
+        if self._search_thread and self._search_thread.isRunning():
+            self._search_thread.stop()
+            self._search_thread.wait()
+
+        self.status_updated.emit(f"Buscando por '{query}'...")
+        self.search_results_view.clear()
+        self.view_stack.setCurrentWidget(self.search_results_view)
+        self._is_search_mode = True
+        self.btn_clear_search.show()
+        
+        current_dir = self.model.rootPath()
+        self._search_thread = FileSearchEngine(current_dir, query)
+        self._search_thread.match_found.connect(self._add_search_result)
+        self._search_thread.progress_updated.connect(self.status_updated)
+        self._search_thread.search_finished.connect(self._finish_search)
+        self._search_thread.start()
+
+    def _clear_search(self):
+        if self._search_thread and self._search_thread.isRunning():
+            self._search_thread.stop()
+        
+        self.search_input.clear()
+        self.view_stack.setCurrentWidget(self.list_view)
+        self._is_search_mode = False
+        self.btn_clear_search.hide()
+        self._on_directory_loaded(self.model.rootPath())
+
+    def _add_search_result(self, filepath, line_num, line_content):
+        item = QListWidgetItem()
+        item.setData(Qt.UserRole, (filepath, line_num))
+        
+        widget = QWidget()
+        layout = QVBoxLayout(widget)
+        layout.setContentsMargins(5, 3, 5, 3)
+        
+        filename = os.path.basename(filepath)
+        relative_path = os.path.relpath(os.path.dirname(filepath), self.model.rootPath())
+        path_text = filename if relative_path == '.' else os.path.join(relative_path, filename)
+
+        lbl_path = QLabel(path_text)
+        lbl_path.setStyleSheet("font-weight: bold; background: transparent;")
+        
+        lbl_content = QLabel(f"<span style='color:#888;'>{line_num}: </span>{line_content}")
+        lbl_content.setStyleSheet("background: transparent;")
+        
+        layout.addWidget(lbl_path)
+        layout.addWidget(lbl_content)
+        
+        item.setSizeHint(widget.sizeHint())
+        self.search_results_view.addItem(item)
+        self.search_results_view.setItemWidget(item, widget)
+
+    def _finish_search(self, match_count):
+        self.status_updated.emit(f"Busca concluída. {match_count} resultados encontrados.")
+
+    def _on_search_result_activated(self, item):
+        filepath, line_num = item.data(Qt.UserRole)
+        self.path_confirmed.emit(filepath)
