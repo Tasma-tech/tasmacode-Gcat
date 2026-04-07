@@ -1,8 +1,48 @@
 from PySide6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QTabWidget, QWidget, 
                                QLabel, QSlider, QCheckBox, QComboBox, QPushButton, QDialogButtonBox, QLineEdit, 
-                               QSpinBox, QColorDialog, QFileDialog, QMessageBox, QCompleter, QRadioButton, QListWidget, QStackedWidget, QScrollArea)
+                               QSpinBox, QColorDialog, QFileDialog, QMessageBox, QCompleter, QRadioButton, QListWidget, QStackedWidget, QScrollArea, QStyledItemDelegate, QStyle)
 from PySide6.QtCore import Qt, QSize
-from PySide6.QtGui import QColor, QFont
+from PySide6.QtGui import QColor, QFont, QTextDocument, QAbstractTextDocumentLayout, QPainter
+
+class HighlightDelegate(QStyledItemDelegate):
+    """Delegate para desenhar o texto com destaque (highlight) para a busca."""
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.search_text = ""
+
+    def paint(self, painter, option, index):
+        painter.save()
+        
+        # No PySide6, initStyleOption modifica o objeto 'option' in-place.
+        self.initStyleOption(option, index)
+        text = index.data(Qt.DisplayRole)
+        
+        if self.search_text and self.search_text.lower() in text.lower():
+            # Escapa o texto e adiciona a tag de destaque na parte correspondente
+            start_idx = text.lower().find(self.search_text.lower())
+            end_idx = start_idx + len(self.search_text)
+            
+            highlighted_text = (f"{text[:start_idx]}"
+                               f"<span style='background-color: #ffc600; color: #000000;'>{text[start_idx:end_idx]}</span>"
+                               f"{text[end_idx:]}")
+            
+            doc = QTextDocument()
+            # Aplica o estilo de cor padrão do item antes do destaque
+            color = option.palette.text().color().name()
+            doc.setHtml(f"<html><body style='color: {color};'>{highlighted_text}</body></html>")
+            
+            option.text = "" # Limpa o texto original para não sobrepor
+            # Verifica se self.parent() é válido e tem um estilo
+            if self.parent() and self.parent().style():
+                self.parent().style().drawControl(QStyle.CE_ItemViewItem, option, painter)
+            # else: Fallback se o estilo não estiver disponível, o fundo do item não será desenhado corretamente
+            
+            painter.translate(option.rect.left() + 10, option.rect.top() + 8) # Ajuste de padding
+            doc.drawContents(painter)
+        else:
+            super().paint(painter, option, index)
+        
+        painter.restore()
 
 class SettingsDialog(QDialog):
     """Janela de preferências do usuário."""
@@ -74,6 +114,10 @@ class SettingsDialog(QDialog):
             }
         """)
         self.sidebar_layout.addWidget(self.sidebar)
+        
+        # Aplica o delegate de destaque
+        self.highlight_delegate = HighlightDelegate(self.sidebar)
+        self.sidebar.setItemDelegate(self.highlight_delegate)
 
         self.pages = QStackedWidget()
         self.pages.setStyleSheet("background-color: #1e1e1e; border: none;")
@@ -461,7 +505,31 @@ class SettingsDialog(QDialog):
 
     def _filter_sidebar(self, text):
         """Filtra as categorias da sidebar com base no texto de pesquisa."""
-        text = text.lower()
+        search_term = text.lower()
+        self.highlight_delegate.search_text = text # Atualiza o texto no delegate
+        
         for i in range(self.sidebar.count()):
             item = self.sidebar.item(i)
-            item.setHidden(text not in item.text().lower())
+            category_name = item.text().lower()
+            
+            # 1. Verifica se o termo está no nome da categoria
+            match_found = search_term in category_name
+            
+            # 2. Se não encontrou no nome, busca dentro da página correspondente
+            if not match_found and search_term:
+                page_widget = self.pages.widget(i)
+                match_found = self._search_in_page(page_widget, search_term)
+            
+            item.setHidden(not match_found)
+        
+        self.sidebar.update() # Força o repaint para o delegate agir
+
+    def _search_in_page(self, page_widget, text):
+        """Busca recursiva de texto dentro de todos os widgets de uma página."""
+        # No PySide6, findChildren não aceita uma tupla de tipos como argumento.
+        # Iteramos sobre os tipos que possuem o método .text() para realizar a busca.
+        for widget_type in (QLabel, QCheckBox, QRadioButton):
+            for widget in page_widget.findChildren(widget_type):
+                if text in widget.text().lower():
+                    return True
+        return False
