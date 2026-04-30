@@ -29,6 +29,7 @@ from src.core.search_panel import SearchPanel
 from src.core.project_launcher import ProjectLauncher
 from src.core.project_session_orchestrator import ProjectSessionOrchestrator
 from src.core.config_manager import ConfigManager
+from src.core.ui_logic.editor_session_delegate import EditorSessionDelegate
 from src.ui.settings_dialog import SettingsDialog
 from src.ui.editor import CodeEditor
 from src.ui.sidebar import Sidebar
@@ -84,6 +85,7 @@ class JCodeMainWindow(QMainWindow):
         self.command_registry = CommandRegistry()
         self.session_manager = SessionManager()
         self.project_session_orchestrator = ProjectSessionOrchestrator(self.session_manager)
+        self.editor_session_delegate = EditorSessionDelegate(self.project_session_orchestrator)
         self.input_mapper = InputMapper(self.command_registry)
         self.github_auth = GithubAuth(self.config_manager.config_dir)
         self.github_auth.auth_changed.connect(self._update_user_avatar)
@@ -1455,76 +1457,50 @@ class JCodeMainWindow(QMainWindow):
 
     def _load_session(self):
         """Carrega a lista de arquivos da sessão anterior."""
-        session_data = self.project_session_orchestrator.load_session_snapshot()
-        
-        # 1. Recupera e valida o diretório de trabalho
-        root_path = session_data.get("last_directory")
-        if root_path and os.path.exists(root_path) and os.path.isdir(root_path):
-            self.sidebar.set_root_path(root_path)
-            self.search_manager.set_root_path(root_path)
-            self.setWindowTitle(f"JCode - {os.path.basename(root_path)}")
-        else:
-            root_path = None
-
-        # 2. Abre os arquivos e restaura cursores
-        files_to_open = session_data.get("open_files", [])
-        for file_data in files_to_open:
-            path = file_data.get("path")
-            if path:
-                # Reconstrói caminho absoluto se necessário
-                if root_path and not os.path.isabs(path):
-                    path = os.path.join(root_path, path)
-                
-                if os.path.exists(path):
-                    self._open_file(path)
-                    
-                    # Restaura posição do cursor
-                    cursor_info = file_data.get("cursor")
-                    if cursor_info and self.active_editor:
-                        self.active_editor.buffer.update_last_cursor(
-                            cursor_info.get("line", 0), 
-                            cursor_info.get("col", 0)
-                        )
-                        self.active_editor.viewport().update()
-
-        # 3. Restaura a aba ativa
-        active_file = session_data.get("active_file")
-        if active_file:
-            if root_path and not os.path.isabs(active_file):
-                active_file = os.path.join(root_path, active_file)
-            
-            for i in range(self.editor_group.tab_widget.count()):
-                editor = self.editor_group.tab_widget.widget(i)   
-                if isinstance(editor, CodeEditor) and editor.property("file_path") == active_file:
-                    self.editor_group.tab_widget.setCurrentIndex(i)
-                    break
+        self.editor_session_delegate.load(
+            set_root_path_fn=self.sidebar.set_root_path,
+            set_search_root_fn=self.search_manager.set_root_path,
+            set_window_title_fn=self.setWindowTitle,
+            open_file_fn=self._open_file,
+            restore_active_cursor_fn=self._restore_active_editor_cursor,
+            iter_editors_fn=self._iter_code_editors_with_index,
+            get_editor_path_fn=lambda editor: editor.property("file_path"),
+            select_tab_by_index_fn=self.editor_group.tab_widget.setCurrentIndex,
+        )
 
     def _save_session(self):
         """Salva a lista de arquivos abertos."""
-        open_files = []
+        self.editor_session_delegate.save(
+            iter_editors_fn=self._iter_code_editors,
+            get_editor_path_fn=lambda editor: editor.property("file_path"),
+            get_editor_cursor_fn=self._get_editor_cursor_position,
+            get_root_path_fn=self._get_sidebar_root_path,
+            get_active_path_fn=lambda: self.active_editor.property("file_path") if self.active_editor else None,
+        )
 
+    def _iter_code_editors_with_index(self):
         for i in range(self.editor_group.tab_widget.count()):
             editor = self.editor_group.tab_widget.widget(i)
             if isinstance(editor, CodeEditor):
-                file_path = editor.property("file_path")
-                if file_path:
-                    cursor = editor.buffer.cursors[-1]
-                    open_files.append({
-                        'path': file_path, 
-                        'cursor': {'line': cursor.line, 'col': cursor.col}
-                    })
+                yield i, editor
 
-        # Determina o root_path baseado no estado da Sidebar
-        root_path = None
+    def _iter_code_editors(self):
+        for _, editor in self._iter_code_editors_with_index():
+            yield editor
+
+    def _restore_active_editor_cursor(self, line: int, col: int):
+        if self.active_editor and self.active_editor.buffer:
+            self.active_editor.buffer.update_last_cursor(line, col)
+            self.active_editor.viewport().update()
+
+    def _get_editor_cursor_position(self, editor):
+        cursor = editor.buffer.cursors[-1]
+        return cursor.line, cursor.col
+
+    def _get_sidebar_root_path(self):
         if self.sidebar.stack.currentWidget() == self.sidebar.tree:
-            root_path = self.sidebar.file_model.rootPath()
-            
-
-
-        active_path = self.active_editor.property("file_path") if self.active_editor else None
-        
-        payload = self.project_session_orchestrator.build_session_payload(root_path, open_files, active_path)
-        self.project_session_orchestrator.persist_session_payload(payload)
+            return self.sidebar.file_model.rootPath()
+        return None
 
     def _zoom_in(self):
         """Aumenta o tamanho da fonte global."""
