@@ -3,7 +3,7 @@ from PySide6.QtWidgets import (QWidget, QVBoxLayout, QListView, QFileSystemModel
                                QInputDialog, QMessageBox, QToolTip, QScrollArea, QFrame, 
                                QSlider, QComboBox, QLabel, QSpinBox, QStackedWidget)
 from PySide6.QtCore import Qt, Signal, QDir, QSize, QEvent, QThread, QDateTime, QSortFilterProxyModel
-from PySide6.QtGui import QKeySequence, QCursor
+from PySide6.QtGui import QKeySequence, QCursor, QAction
 from src.core.editor_logic.file_manager import FileManager
 from src.core.tasmafile.search_engine import FileSearchEngine
 import os
@@ -143,9 +143,25 @@ class TasmaFileView(QWidget):
         self.btn_forward.clicked.connect(self.go_forward)
         self.btn_forward.setEnabled(False)
 
+        self.btn_up = QPushButton()
+        self.btn_up.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_ArrowUp))
+        self.btn_up.setFixedSize(32, 32)
+        self.btn_up.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_up.setToolTip("Ir para pasta pai (Alt+Up)")
+        self.btn_up.clicked.connect(self.go_up)
+
+        self.btn_home = QPushButton()
+        self.btn_home.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_DirHomeIcon))
+        self.btn_home.setFixedSize(32, 32)
+        self.btn_home.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_home.setToolTip("Ir para Home")
+        self.btn_home.clicked.connect(lambda: self.set_path(QDir.homePath()))
+
         self.address_bar = QLineEdit()
-        self.address_bar.setReadOnly(True)
+        self.address_bar.setReadOnly(False)
         self.address_bar.setFixedHeight(32)
+        self.address_bar.setPlaceholderText("Digite um caminho e pressione Enter")
+        self.address_bar.returnPressed.connect(self._navigate_from_address_bar)
 
         self.search_input = QLineEdit()
         self.search_input.setPlaceholderText("Buscar no conteúdo...")
@@ -161,6 +177,8 @@ class TasmaFileView(QWidget):
 
         nav_layout.addWidget(self.btn_back)
         nav_layout.addWidget(self.btn_forward)
+        nav_layout.addWidget(self.btn_up)
+        nav_layout.addWidget(self.btn_home)
         nav_layout.addWidget(self.address_bar, 1)
         nav_layout.addWidget(self.search_input, 1)
         nav_layout.addWidget(self.btn_clear_search)
@@ -319,6 +337,7 @@ class TasmaFileView(QWidget):
         
         self.list_view.doubleClicked.connect(self._on_double_click)
         self.list_view.clicked.connect(self._on_click)
+        self.list_view.setAlternatingRowColors(True)
         
         # Conexões dos filtros
         self.filter_ext_input.textChanged.connect(self._apply_filters)
@@ -336,6 +355,40 @@ class TasmaFileView(QWidget):
         self.view_stack.addWidget(self.search_results_view)
 
         layout.addWidget(self.view_stack)
+        self._setup_shortcuts()
+
+    def _setup_shortcuts(self):
+        focus_address = QAction(self)
+        focus_address.setShortcut(QKeySequence("Ctrl+L"))
+        focus_address.triggered.connect(self._focus_address_bar)
+        self.addAction(focus_address)
+
+        go_up_action = QAction(self)
+        go_up_action.setShortcut(QKeySequence("Alt+Up"))
+        go_up_action.triggered.connect(self.go_up)
+        self.addAction(go_up_action)
+
+        refresh_action = QAction(self)
+        refresh_action.setShortcut(QKeySequence("F5"))
+        refresh_action.triggered.connect(self.refresh_current_path)
+        self.addAction(refresh_action)
+
+    def _focus_address_bar(self):
+        self.address_bar.setFocus()
+        self.address_bar.selectAll()
+
+    def _navigate_from_address_bar(self):
+        path = self.address_bar.text().strip()
+        self.set_path(path)
+
+    def go_up(self):
+        current_path = self.model.rootPath()
+        parent = os.path.dirname(current_path.rstrip(os.sep))
+        if parent and parent != current_path:
+            self.set_path(parent)
+
+    def refresh_current_path(self):
+        self.set_path(self.model.rootPath(), force_refresh=True)
 
     def _set_icon_mode(self):
         """Configura visualização em grade (ícones grandes)."""
@@ -470,6 +523,8 @@ class TasmaFileView(QWidget):
             QPushButton:disabled {{ color: #555; }}"""
         self.btn_back.setStyleSheet(tool_button_style)
         self.btn_forward.setStyleSheet(tool_button_style)
+        self.btn_up.setStyleSheet(tool_button_style)
+        self.btn_home.setStyleSheet(tool_button_style)
         self.btn_toggle_view.setStyleSheet(tool_button_style)
         self.btn_toggle_filters.setStyleSheet(tool_button_style)
         self.btn_toggle_preview.setStyleSheet(tool_button_style)
@@ -524,13 +579,18 @@ class TasmaFileView(QWidget):
             QListWidget::item:hover {{ background-color: {border}; }}
         """)
 
-    def set_path(self, path):
+    def set_path(self, path, force_refresh: bool = False):
         # Ao navegar, sempre cancela o modo de busca
         if self._is_search_mode:
             self._clear_search()
 
         if path == "plugins_virtual_root":
             path = QDir.homePath()
+        path = os.path.expanduser(path)
+        if not os.path.isdir(path):
+            self.status_updated.emit(f"Caminho inválido: {path}")
+            self.address_bar.setText(self.model.rootPath())
+            return
             
         # History management
         if not self._is_navigating_history:
@@ -543,9 +603,12 @@ class TasmaFileView(QWidget):
         self.btn_forward.setEnabled(bool(self._future))
         
         self.address_bar.setText(path)
+        if force_refresh:
+            self.model.setRootPath("")
         source_idx = self.model.setRootPath(path)
         proxy_idx = self.proxy_model.mapFromSource(source_idx)
         self.list_view.setRootIndex(proxy_idx)
+        self.status_updated.emit(f"Diretório atual: {path}")
 
     def _on_click(self, index):
         source_index = self.proxy_model.mapToSource(index)

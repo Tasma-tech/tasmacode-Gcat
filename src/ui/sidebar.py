@@ -55,16 +55,22 @@ class Sidebar(QWidget):
         self.btn_refresh = self._create_action_btn(QStyle.StandardPixmap.SP_BrowserReload, "Recarregar")
         self.btn_open_project = self._create_action_btn(QStyle.StandardPixmap.SP_FileDialogNewFolder, "Abrir Projeto")
         self.btn_toggle_view = self._create_action_btn(QStyle.StandardPixmap.SP_FileDialogDetailedView, "Alternar Marcadores")
+        self.btn_expand_all = self._create_action_btn(QStyle.StandardPixmap.SP_ArrowDown, "Expandir Tudo")
+        self.btn_collapse_all = self._create_action_btn(QStyle.StandardPixmap.SP_ArrowUp, "Recolher Tudo")
         
         self.btn_new_file.clicked.connect(lambda: self._start_creation(is_folder=False))
         self.btn_new_folder.clicked.connect(lambda: self._start_creation(is_folder=True))
         self.btn_refresh.clicked.connect(self._refresh_tree)
         self.btn_open_project.clicked.connect(self.open_project_clicked.emit)
         self.btn_toggle_view.clicked.connect(self._toggle_view_mode)
+        self.btn_expand_all.clicked.connect(self._expand_all)
+        self.btn_collapse_all.clicked.connect(self._collapse_all)
 
         self.lbl_title = QLabel("EXPLORER")
         tb_layout.addWidget(self.lbl_title)
         tb_layout.addStretch()
+        tb_layout.addWidget(self.btn_collapse_all)
+        tb_layout.addWidget(self.btn_expand_all)
         tb_layout.addWidget(self.btn_toggle_view)
         tb_layout.addWidget(self.btn_open_project)
         tb_layout.addWidget(self.btn_new_file)
@@ -323,8 +329,24 @@ class Sidebar(QWidget):
         self.input_edit.hide()
 
     def _refresh_tree(self):
-        # QFileSystemModel atualiza automaticamente, mas podemos forçar re-scan se necessário
-        pass
+        root_path = self.file_model.rootPath()
+        if not root_path:
+            return
+        source_index = self.file_model.setRootPath("")
+        source_index = self.file_model.setRootPath(root_path)
+        proxy_index = self.filter_proxy_model.mapFromSource(source_index)
+        self.tree.setRootIndex(proxy_index)
+        self.status_message.emit("Explorer atualizado.", 2000)
+
+    def _expand_all(self):
+        if self.stack.currentWidget() == self.tree:
+            self.tree.expandAll()
+            self.status_message.emit("Explorer expandido.", 1500)
+
+    def _collapse_all(self):
+        if self.stack.currentWidget() == self.tree:
+            self.tree.collapseAll()
+            self.status_message.emit("Explorer recolhido.", 1500)
 
     def eventFilter(self, obj, event):
         if hasattr(self, 'input_edit') and obj == self.input_edit and event.type() == QEvent.Type.KeyPress:

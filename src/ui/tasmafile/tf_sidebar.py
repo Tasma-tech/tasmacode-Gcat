@@ -44,6 +44,7 @@ class TasmaSidebar(QWidget):
         """)
 
     def _populate(self):
+        self.list_widget.clear()
         # Seção: Navegação
         
         # Seção: Favoritos (Custom)

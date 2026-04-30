@@ -48,6 +48,7 @@ class TasmaFileWindow(QDialog):
         self.btn_select = QPushButton("Selecionar / Abrir")
         self.btn_select.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_DialogOkButton))
         self.btn_select.setCursor(Qt.PointingHandCursor)
+        self.btn_select.setEnabled(False)
         self.btn_select.clicked.connect(lambda: self._on_path_confirmed(self.selected_path))
         
         self.lbl_status = QLabel("Pronto")
@@ -66,6 +67,8 @@ class TasmaFileWindow(QDialog):
         view_splitter = QSplitter(Qt.Horizontal)
         view_splitter.addWidget(content_widget)
         view_splitter.addWidget(self.preview_panel)
+        view_splitter.setChildrenCollapsible(False)
+        view_splitter.setSizes([700, 300])
         view_splitter.setStretchFactor(0, 2) # File view é maior
         view_splitter.setStretchFactor(1, 1) # Preview é menor
         
@@ -97,6 +100,7 @@ class TasmaFileWindow(QDialog):
         self.file_view.apply_theme(theme)
         self.preview_panel.apply_theme(theme)
         self.btn_select.setStyleSheet(f"background-color: {accent}; color: white; padding: 8px 16px; border: none; border-radius: 4px; font-weight: bold;")
+        self.lbl_status.setStyleSheet(f"color: {fg}; font-size: 11px; padding-left: 5px;")
 
     def _refresh_favorites(self):
         favs = self.provider.get_custom_categories()
@@ -107,6 +111,7 @@ class TasmaFileWindow(QDialog):
 
     def _on_path_selected(self, path):
         self.selected_path = path
+        self.btn_select.setEnabled(bool(path))
         self.preview_panel.show_preview(path)
 
     def _on_path_confirmed(self, path):
@@ -123,3 +128,4 @@ class TasmaFileWindow(QDialog):
 
     def _on_preview_toggled(self, visible):
         self.preview_panel.setVisible(visible)
+        self._update_status("Preview habilitada" if visible else "Preview oculta")
