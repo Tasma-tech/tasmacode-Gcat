@@ -13,7 +13,8 @@ if root_dir not in sys.path:
 
 from src.core.editor_logic.buffer import DocumentBuffer
 from src.core.editor_logic.file_manager import FileManager
-from src.core.ui_logic.extension_bridge import ExtensionBridge, EditorAPI
+from src.core.ui_logic.extension_bridge import ExtensionBridge
+from src.core.ui_logic.editor_api_factory import EditorApiFactory
 from src.core.editor_logic.clipboard_manager import ClipboardManager
 from src.core.editor_logic.autocomplete_manager import AutocompleteManager
 from src.core.editor_logic.search_manager import SearchManager
@@ -26,6 +27,7 @@ from src.core.ui_logic.event_handler import EventHandler
 from src.core.ui_logic.viewport_controller import ViewportController
 from src.core.search_panel import SearchPanel
 from src.core.project_launcher import ProjectLauncher
+from src.core.project_session_orchestrator import ProjectSessionOrchestrator
 from src.core.config_manager import ConfigManager
 from src.ui.settings_dialog import SettingsDialog
 from src.ui.editor import CodeEditor
@@ -81,6 +83,7 @@ class JCodeMainWindow(QMainWindow):
         
         self.command_registry = CommandRegistry()
         self.session_manager = SessionManager()
+        self.project_session_orchestrator = ProjectSessionOrchestrator(self.session_manager)
         self.input_mapper = InputMapper(self.command_registry)
         self.github_auth = GithubAuth(self.config_manager.config_dir)
         self.github_auth.auth_changed.connect(self._update_user_avatar)
@@ -89,6 +92,7 @@ class JCodeMainWindow(QMainWindow):
         self.event_handler = EventHandler(self.extension_bridge, None) # Buffer será definido dinamicamente
         self.viewport_controller = ViewportController()
         self.cache_dir = os.path.join(root_dir, "cache")
+        self._editor_api_factory = self._build_editor_api_factory()
         
         # --- 3. Configuração da UI ---
         self.setWindowTitle("JCode - Modular Editor")
@@ -800,9 +804,11 @@ class JCodeMainWindow(QMainWindow):
         """Abre/fecha o painel de chat IA."""
         if not hasattr(self, 'ai_chat_widget'):
             # Cria o widget na primeira chamada
-            from plugins.code_ia.ai_assistant import AIChatWidget
-            # Aqui, _create_editor_api é chamado SEM argumentos
-            self.ai_chat_widget = AIChatWidget(self._create_editor_api())
+            ai_plugin = self.extension_bridge.get_plugin("code_ia")
+            if not ai_plugin or not hasattr(ai_plugin, "AIChatWidget"):
+                self.custom_statusbar.flash_message("Plugin de IA não está ativo.", color="#dc3545")
+                return
+            self.ai_chat_widget = ai_plugin.AIChatWidget(self._create_editor_api())
 
             # Adiciona ao layout principal (como uma nova sidebar)
             self.ai_splitter = QSplitter(Qt.Orientation.Horizontal)
@@ -824,8 +830,7 @@ class JCodeMainWindow(QMainWindow):
         if self.ai_chat_widget.isVisible():
             self.ai_chat_widget.input_field.setFocus()
 
-    def _create_editor_api(self):
-        """Cria uma instância da API para uso interno (ex: Chat IA)."""
+    def _build_editor_api_factory(self):
         def update_config_wrapper(key, value):
             self.config_manager.config[key] = value
             self.config_manager.save_config(self.config_manager.config)
@@ -838,7 +843,7 @@ class JCodeMainWindow(QMainWindow):
                 return self.sidebar.file_model.rootPath()
             return None
 
-        return EditorAPI(
+        return EditorApiFactory(
             insert_fn=self._api_insert_text,
             get_text_fn=self._api_get_text,
             add_menu_fn=self._api_add_menu,
@@ -849,6 +854,10 @@ class JCodeMainWindow(QMainWindow):
             get_project_root_fn=get_project_root_wrapper,
             undo_fn=lambda: self.command_registry.execute("edit.undo")
         )
+
+    def _create_editor_api(self):
+        """Cria uma instância da API para uso interno (ex: Chat IA)."""
+        return self._editor_api_factory.create()
 
     def _toggle_sidebar(self):
         if not self.sidebar:
@@ -935,12 +944,10 @@ class JCodeMainWindow(QMainWindow):
     def _show_diagram_window(self):
         """Abre a janela do plugin dIAgram."""
         try:
-            # Importa o plugin
-            from plugins.dIAgram.diagram import DiagramWindow
-
-            # Cria e mostra a janela
-            # Mantém referência para não ser coletado pelo GC
-            self.diagram_window = DiagramWindow(self)
+            diagram_plugin = self.extension_bridge.get_plugin("dIAgram")
+            if not diagram_plugin or not hasattr(diagram_plugin, "create_diagram_window"):
+                raise ImportError("Plugin dIAgram não ativo.")
+            self.diagram_window = diagram_plugin.create_diagram_window(self)
             self.diagram_window.show()
 
             self.custom_statusbar.showMessage("Gerador de Diagramas aberto", 3000)
@@ -1012,7 +1019,7 @@ class JCodeMainWindow(QMainWindow):
 
     def _show_project_launcher(self):
         """Exibe o diálogo de troca rápida de projetos."""
-        session = self.session_manager.load_session()
+        session = self.project_session_orchestrator.load_session_snapshot()
         recent = session.get("recent_projects", [])
         
         launcher = ProjectLauncher(recent, self)
@@ -1079,17 +1086,14 @@ class JCodeMainWindow(QMainWindow):
         if not self._close_all_files():
             return
 
+        project_state = self.project_session_orchestrator.prepare_project_load(path)
         self.sidebar.set_root_path(path)
         self.search_manager.set_root_path(path)
         self.right_sidebar.load_repo(path) # Atualiza a sidebar direita (Git)
-        self.setWindowTitle(f"JCode - {os.path.basename(path)}")
+        self.setWindowTitle(project_state["title"])
         if hasattr(self, 'custom_title_bar'):
-            self.custom_title_bar.set_title(f"JCode - {os.path.basename(path)}")
-        
-        self.session_manager.add_to_history(path)
-        # Salva sessão com o novo root e lista de arquivos vazia (pois fechamos tudo)
-        self.session_manager.save_session(path, [], None)
-        self.custom_statusbar.showMessage(f"Projeto carregado: {path}", 3000)
+            self.custom_title_bar.set_title(project_state["title"])
+        self.custom_statusbar.showMessage(project_state["status_message"], 3000)
 
     def _on_find(self, text, case_sensitive, whole_word):
         if not self.active_editor or not text:
@@ -1249,6 +1253,7 @@ class JCodeMainWindow(QMainWindow):
             def on_editor_text_changed():
                 buffer.dirty = True
                 self._on_buffer_modified()
+                self.extension_bridge.trigger_hook("on_text_changed", buffer)
 
             editor.text_changed.connect(on_editor_text_changed)
             editor.text_changed.connect(self._check_autocomplete_trigger)
@@ -1262,6 +1267,7 @@ class JCodeMainWindow(QMainWindow):
             editor.setProperty("event_handler", handler)
 
             self.editor_group.add_editor(editor, path)
+            self.extension_bridge.trigger_hook("on_file_open", path, editor)
             self.custom_statusbar.flash_message(f"Arquivo aberto: {os.path.basename(path)}", color="#007acc")
         except Exception as e:
             self.custom_statusbar.flash_message(f"Erro ao abrir: {e}", color="#dc3545")
@@ -1424,30 +1430,7 @@ class JCodeMainWindow(QMainWindow):
         self.extension_bridge.load_plugins(plugins_path)
         
         # Fase 2: Activate (Execução com API)
-        def update_config_wrapper(key, value):
-            # Atualiza a configuração e salva no disco
-            self.config_manager.config[key] = value
-            self.config_manager.save_config(self.config_manager.config)
-            
-        def get_config_wrapper(key, default=None):
-            return self.config_manager.get(key) or default
-
-        def get_project_root_wrapper():
-            if self.sidebar and self.sidebar.stack.currentWidget() == self.sidebar.tree:
-                return self.sidebar.file_model.rootPath()
-            return None
-
-        self.extension_bridge.activate_plugins(
-            insert_fn=self._api_insert_text,
-            get_text_fn=self._api_get_text,
-            add_menu_fn=self._api_add_menu,
-            log_fn=self._api_log,
-            get_editor_fn=lambda: self.active_editor,
-            update_config_fn=update_config_wrapper,
-            get_config_fn=get_config_wrapper,
-            get_project_root_fn=get_project_root_wrapper,
-            undo_fn=lambda: self.command_registry.execute("edit.undo")
-        )
+        self.extension_bridge.activate_plugins(self._editor_api_factory.create)
 
     # --- Implementação da EditorAPI ---
     def _api_insert_text(self, text):
@@ -1472,7 +1455,7 @@ class JCodeMainWindow(QMainWindow):
 
     def _load_session(self):
         """Carrega a lista de arquivos da sessão anterior."""
-        session_data = self.session_manager.load_session()
+        session_data = self.project_session_orchestrator.load_session_snapshot()
         
         # 1. Recupera e valida o diretório de trabalho
         root_path = session_data.get("last_directory")
@@ -1540,7 +1523,8 @@ class JCodeMainWindow(QMainWindow):
 
         active_path = self.active_editor.property("file_path") if self.active_editor else None
         
-        self.session_manager.save_session(root_path, open_files, active_path)
+        payload = self.project_session_orchestrator.build_session_payload(root_path, open_files, active_path)
+        self.project_session_orchestrator.persist_session_payload(payload)
 
     def _zoom_in(self):
         """Aumenta o tamanho da fonte global."""

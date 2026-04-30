@@ -1,7 +1,7 @@
 from PySide6.QtWidgets import QAbstractScrollArea, QMenu, QInputDialog, QColorDialog, QToolTip
 from PySide6.QtCore import Signal, Qt, QTimer, QRect, QPoint, QEvent
 from PySide6.QtGui import QPainter, QColor, QFont, QFontMetrics, QPen, QFontInfo, QCursor
-from plugins.line_number_area import LineNumberArea
+from src.ui.components.line_number_area import LineNumberArea
 from .autocomplete_widget import AutocompleteWidget, ParameterHintWidget
 from src.core.editor_logic.marker_manager import MarkerManager
 from src.core.editor_logic.context_menu_logic import ContextMenuLogic

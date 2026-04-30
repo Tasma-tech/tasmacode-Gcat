@@ -178,11 +178,11 @@ class ExtensionBridge(QObject):
             logger.error(f"Erro ao carregar pacote {package_name}: {e}")
             self.plugin_error.emit(package_name, str(e))
 
-    def activate_plugins(self, insert_fn, get_text_fn, add_menu_fn, log_fn, get_editor_fn=None, update_config_fn=None, get_config_fn=None, get_project_root_fn=None, undo_fn=None) -> None:
+    def activate_plugins(self, api_factory: Callable[[], EditorAPI]) -> None:
         """Fase 2: Ativa todos os plugins carregados, injetando a API."""
         for name, module in self._loaded_modules.items():
             try:
-                api = EditorAPI(insert_fn, get_text_fn, add_menu_fn, log_fn, get_editor_fn, update_config_fn, get_config_fn, get_project_root_fn, undo_fn)
+                api = api_factory()
                 module.plugin_main(api)
                 self._plugins[name] = module
                 self.plugin_loaded.emit(name)
@@ -196,3 +196,7 @@ class ExtensionBridge(QObject):
     def get_loaded_plugins(self) -> List[str]:
         """Retorna lista de nomes dos plugins carregados."""
         return list(self._plugins.keys())
+
+    def get_plugin(self, name: str):
+        """Retorna um plugin ativo pelo nome."""
+        return self._plugins.get(name)

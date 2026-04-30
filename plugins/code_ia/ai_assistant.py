@@ -5,6 +5,8 @@ import requests
 import re
 import uuid
 import difflib
+from plugins.code_ia.infra import GroqStreamingClient, ChatHistoryRepository
+from plugins.code_ia.services import ChatService
 from PySide6.QtWidgets import (QWidget, QVBoxLayout, QTextEdit, QLineEdit, QPushButton, 
                                QHBoxLayout, QSplitter, QInputDialog, QToolButton, QLabel, 
                                QDialog, QFormLayout, QComboBox, QDialogButtonBox, QMessageBox,
@@ -27,37 +29,9 @@ class AIWorker(QThread):
 
     def run(self):
         try:
-            # Exemplo com API Groq
-            headers = {
-                "Authorization": f"Bearer {self.api_key}",
-                "Content-Type": "application/json"
-            }
-
-            # Combina contexto e mensagem do sistema (regras/personalidade)
-            full_system_msg = self.context
-            if self.system_message:
-                full_system_msg += "\n\n" + self.system_message
-
-            # Adiciona anexos ao contexto se houver
-            # (A lógica de anexos é tratada antes de chamar o worker, passando no 'prompt' ou 'context')
-            # Aqui assumimos que o 'prompt' ou 'context' já contém os dados necessários.
-
-            data = {
-                "model": self.model,
-                "messages": [
-                    {"role": "system", "content": self.context},
-                    {"role": "user", "content": self.prompt}
-                ],
-                "stream": True
-            }
-
-            response = requests.post(
-                "https://api.groq.com/openai/v1/chat/completions",
-                headers=headers,
-                json=data,
-                timeout=60,
-                stream=True
-            )
+            client = GroqStreamingClient(self.api_key, self.model)
+            parser = ChatService(None)
+            response = client.stream_chat(self.prompt, self.context)
 
             if response.status_code == 200:
                 for line in response.iter_lines():
@@ -65,18 +39,9 @@ class AIWorker(QThread):
                         if self.isInterruptionRequested():
                             break
                             
-                        decoded_line = line.decode('utf-8')
-                        if decoded_line.startswith("data: "):
-                            if decoded_line.strip() == "data: [DONE]":
-                                break
-                            try:
-                                json_data = json.loads(decoded_line[6:])
-                                delta = json_data["choices"][0].get("delta", {})
-                                content = delta.get("content", "")
-                                if content:
-                                    self.chunk_received.emit(content)
-                            except:
-                                pass
+                        content = parser.parse_stream_chunk(line)
+                        if content:
+                            self.chunk_received.emit(content)
                 self.finished_signal.emit()
             else:
                 try:
@@ -334,26 +299,17 @@ class CodeDiffDialog(QDialog):
 class ChatHistoryManager:
     """Gerencia o armazenamento local dos chats."""
     def __init__(self):
-        self.history_dir = os.path.join(os.path.expanduser("~"), ".jcode", "code_ia")
-        os.makedirs(self.history_dir, exist_ok=True)
-        self.history_file = os.path.join(self.history_dir, "chats.json")
+        self.repo = ChatHistoryRepository()
         self.chats = self._load()
 
     def _load(self):
-        if os.path.exists(self.history_file):
-            try:
-                with open(self.history_file, 'r', encoding='utf-8') as f:
-                    return json.load(f)
-            except:
-                return []
-        return []
+        return self.repo.load()
 
     def save(self):
-        with open(self.history_file, 'w', encoding='utf-8') as f:
-            json.dump(self.chats, f, indent=2)
+        self.repo.save(self.chats)
 
     def create_chat(self):
-        chat = {"id": str(uuid.uuid4()), "title": "Novo Chat", "messages": [], "pinned": False}
+        chat = self.repo.create_chat()
         self.chats.insert(0, chat)
         self.save()
         return chat
@@ -382,6 +338,7 @@ class AIChatWidget(QWidget):
         self.api = api
         self.api_key = self.api.get_config("groq_api_key", "") if self.api else ""
         self.model = self.api.get_config("groq_model", "llama-3.3-70b-versatile") if self.api else "llama-3.3-70b-versatile"
+        self.chat_service = ChatService(api)
         self.history_manager = ChatHistoryManager()
         self.current_chat = None
         self.code_snippets = {} # Armazena snippets para aplicação posterior
@@ -708,37 +665,11 @@ class AIChatWidget(QWidget):
         context = self.api.get_full_text()
         
         # Processa anexos
-        attachments_content = ""
+        attachments_content = self.chat_service.build_attachments_context(self.attached_files)
         if self.attached_files:
-            attachments_content = "\n\n--- Arquivos Anexados ---\n"
-            for path in self.attached_files:
-                try:
-                    with open(path, 'r', encoding='utf-8') as f:
-                        attachments_content += f"\nArquivo: {os.path.basename(path)}\n```\n{f.read()}\n```\n"
-                except Exception as e:
-                    attachments_content += f"\nErro ao ler {os.path.basename(path)}: {e}\n"
             self.attached_files = [] # Limpa após envio
             self.update_attachments_label()
-
-        # Carrega arquivos de sistema
-        system_msg = self._load_system_files()
-        
-        # Instruções de Capacidades
-        system_msg += "\n\n[SYSTEM: Capabilities]\n"
-        system_msg += "Você é um especialista em edição de código cirúrgica. Ao editar código existente:\n"
-        system_msg += "1. ANALISE o código fornecido no contexto.\n"
-        system_msg += "2. IDENTIFIQUE as linhas exatas (classes, funções, variáveis) que precisam mudar.\n"
-        system_msg += "3. USE o formato SEARCH/REPLACE para alterar APENAS o necessário. NÃO reescreva o arquivo todo a menos que solicitado.\n\n"
-        system_msg += "Formato para Edição Parcial (Search & Replace):\n"
-        system_msg += "<<<<<<< SEARCH\n"
-        system_msg += "    # Copie aqui EXATAMENTE as linhas do código original que serão alteradas\n"
-        system_msg += "    # Inclua indentação correta e contexto suficiente para ser único\n"
-        system_msg += "=======\n"
-        system_msg += "    # Seu novo código aqui\n"
-        system_msg += ">>>>>>> REPLACE\n\n"
-        system_msg += "Formato para Criar Arquivos ou Substituição Total:\n"
-        system_msg += "# file: path/to/file.ext\n"
-        system_msg += "conteudo completo do arquivo...\n"
+        system_msg = self.chat_service.build_system_message()
         
         # Combina prompt com anexos
         full_prompt = message + attachments_content
@@ -755,24 +686,6 @@ class AIChatWidget(QWidget):
         self.send_btn.hide()
         self.stop_btn.show()
         self.worker.start()
-
-    def _load_system_files(self):
-        plugin_dir = os.path.dirname(os.path.abspath(__file__))
-        content = ""
-        
-        # Regras
-        rules_path = os.path.join(plugin_dir, "regras.txt")
-        if os.path.exists(rules_path):
-            with open(rules_path, 'r', encoding='utf-8') as f:
-                content += "Regras:\n" + f.read() + "\n\n"
-                
-        # Personalidade
-        persona_path = os.path.join(plugin_dir, "perssonalidade.txt")
-        if os.path.exists(persona_path):
-            with open(persona_path, 'r', encoding='utf-8') as f:
-                content += "Personalidade:\n" + f.read()
-                
-        return content
 
     def on_chunk(self, text):
         """Recebe pedaços de texto e adiciona ao chat."""
