@@ -38,6 +38,8 @@ class CodeEditor(QAbstractScrollArea):
         self.autocomplete_enabled = False
         self.marker_manager = MarkerManager()
         self.cache_dir = None
+        self.clipboard_manager = None
+        self.parameter_hint_widget = None
         
         # Configuração de Fonte e Métricas
         # Tenta usar fontes modernas, fallback para Monospace genérico
@@ -103,7 +105,7 @@ class CodeEditor(QAbstractScrollArea):
             self.autocomplete_widget.suggestion_selected.connect(self._on_suggestion_selected)
             
             # Inicializa widget de dicas de parâmetros
-            if not hasattr(self, 'parameter_hint_widget'):
+            if self.parameter_hint_widget is None:
                 self.parameter_hint_widget = ParameterHintWidget(self)
                 
             # Conecta sinais para atualização de dicas
@@ -167,6 +169,9 @@ class CodeEditor(QAbstractScrollArea):
 
     def _show_gutter_context_menu(self, global_pos):
         """Exibe o menu de contexto para marcadores."""
+        if not self.buffer:
+            return
+
         # Calcula a linha baseada na posição do mouse relativa ao widget
         local_pos = self.line_number_area.mapFromGlobal(global_pos)
         y = local_pos.y()
@@ -214,7 +219,7 @@ class CodeEditor(QAbstractScrollArea):
             self.buffer, 
             save_callback=self.save_requested.emit,
             close_callback=self.close_requested.emit,
-            clipboard_manager=self.clipboard_manager
+            clipboard_manager=getattr(self, "clipboard_manager", None)
         )
         
         menu = EditorContextMenu(logic, self.theme, self)

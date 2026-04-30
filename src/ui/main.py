@@ -971,12 +971,6 @@ class JCodeMainWindow(QMainWindow):
         dlg = ProfileWindow(self.github_auth, self.theme_manager, self)
         dlg.exec()
 
-    def _close_current_tab(self):
-        """Fecha a aba atual com segurança."""
-        current_idx = self.editor_group.tab_widget.currentIndex()
-        if current_idx != -1:
-            self.editor_group.close_tab(current_idx)
-
     def _refresh_explorer(self):
         """Atualiza a árvore de arquivos na sidebar."""
         if self.sidebar:
@@ -1494,8 +1488,10 @@ class JCodeMainWindow(QMainWindow):
             self.active_editor.viewport().update()
 
     def _get_editor_cursor_position(self, editor):
-        cursor = editor.buffer.cursors[-1]
-        return cursor.line, cursor.col
+        if editor.buffer and editor.buffer.cursors:
+            cursor = editor.buffer.cursors[-1]
+            return cursor.line, cursor.col
+        return 0, 0
 
     def _get_sidebar_root_path(self):
         if self.sidebar.stack.currentWidget() == self.sidebar.tree:
